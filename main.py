@@ -4,7 +4,7 @@ from editor import TextEditor
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setApplicationName("Compiler")
+    app.setApplicationName("Текстовый редактор кода")
     
     window = TextEditor()
     window.show()
