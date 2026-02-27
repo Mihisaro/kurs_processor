@@ -24,4 +24,4 @@ Python и PyQt6
 
 
 
-![alt text](main_window.png)
+![alt text](image.png)
