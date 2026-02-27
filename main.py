@@ -9,4 +9,4 @@ if __name__ == "__main__":
     window = TextEditor()
     window.show()
     
-    sys.exit(app.exec()) # ffv
+    sys.exit(app.exec()) 
