@@ -11,29 +11,38 @@ class TextEditor(QMainWindow):
         
     def initUI(self):
         # Настройка окна
-        self.setWindowTitle("Compiler")
+        self.setWindowTitle("Текстовый редактор кода")
         self.setGeometry(100, 100, 1000, 700)
+        
+        # Разрешаем изменение размера окна
+        self.setMinimumSize(750, 500)  # Минимальный размер окна
         
         # Центральный виджет
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
         # Создаем текстовое поле и область вывода
         self.text_edit = QTextEdit()
         self.text_edit.setPlaceholderText("Введите текст программы...")
-
         
         self.output_area = QTextEdit()
         self.output_area.setPlaceholderText("Результаты работы языкового процессора...")
         self.output_area.setReadOnly(True)
         
-        # Создаем сплиттер
+        # Создаем сплиттер с возможностью изменения размеров
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.addWidget(self.text_edit)
         splitter.addWidget(self.output_area)
-        splitter.setSizes([350, 350])
+        
+        # Устанавливаем начальные размеры (пропорционально)
+        splitter.setSizes([int(self.height() * 0.6), int(self.height() * 0.4)])
+        
+        # Настраиваем свойства сплиттера для лучшей адаптивности
+        splitter.setChildrenCollapsible(False)  # Запрещаем сворачивание областей
+        splitter.setHandleWidth(5)  # Ширина ползунка для удобства
         
         main_layout.addWidget(splitter)
         
@@ -46,6 +55,23 @@ class TextEditor(QMainWindow):
         # Статус бар
         self.statusBar().showMessage("Готов")
         
+        # Сохраняем ссылку на сплиттер для доступа в других методах
+        self.splitter = splitter
+        
+    def resizeEvent(self, event):
+        """Обработчик изменения размера окна"""
+        super().resizeEvent(event)
+        
+        # Адаптируем размеры сплиттера при изменении окна
+        if hasattr(self, 'splitter'):
+            current_sizes = self.splitter.sizes()
+            total_height = sum(current_sizes)
+            
+            # Если общая высота изменилась, пересчитываем пропорции
+            if total_height != self.height():
+                # Сохраняем пропорции 60/40
+                self.splitter.setSizes([int(self.height() * 0.6), int(self.height() * 0.4)])
+    
     def create_menu(self):
         menubar = self.menuBar()
         
@@ -120,6 +146,29 @@ class TextEditor(QMainWindow):
         select_all_action.setShortcut("Ctrl+A")
         select_all_action.triggered.connect(self.text_edit.selectAll)
         edit_menu.addAction(select_all_action)
+        
+        # Меню Вид (новое меню для управления отображением)
+        view_menu = menubar.addMenu("Вид")
+        
+        # Действия для изменения соотношения областей
+        split_60_40 = QAction("Области 60/40", self)
+        split_60_40.triggered.connect(lambda: self.splitter.setSizes([int(self.height() * 0.6), int(self.height() * 0.4)]))
+        view_menu.addAction(split_60_40)
+        
+        split_50_50 = QAction("Области 50/50", self)
+        split_50_50.triggered.connect(lambda: self.splitter.setSizes([int(self.height() * 0.5), int(self.height() * 0.5)]))
+        view_menu.addAction(split_50_50)
+        
+        split_70_30 = QAction("Области 70/30", self)
+        split_70_30.triggered.connect(lambda: self.splitter.setSizes([int(self.height() * 0.7), int(self.height() * 0.3)]))
+        view_menu.addAction(split_70_30)
+        
+        view_menu.addSeparator()
+        
+        # Действие для сброса размеров окна
+        reset_size_action = QAction("Сбросить размер окна", self)
+        reset_size_action.triggered.connect(lambda: self.setGeometry(100, 100, 1000, 700))
+        view_menu.addAction(reset_size_action)
         
         # Меню Пуск
         run_menu = menubar.addMenu("Пуск")
@@ -242,6 +291,29 @@ class TextEditor(QMainWindow):
         about_btn.setToolTip("Информация о программе")
         about_btn.triggered.connect(self.show_about)
         toolbar.addAction(about_btn)
+        
+        # Добавляем растягивающийся пробел для адаптивности
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        toolbar.addWidget(spacer)
+        
+        # Добавляем информацию о размере окна
+        self.size_label = QLabel(f"Размер: {self.width()}x{self.height()}")
+        self.size_label.setStyleSheet("padding: 5px; color: gray;")
+        toolbar.addWidget(self.size_label)
+        
+        # Обновляем информацию о размере при изменении
+        self.update_size_label()
+    
+    def update_size_label(self):
+        """Обновляет информацию о размере окна"""
+        if hasattr(self, 'size_label'):
+            self.size_label.setText(f"Размер: {self.width()}x{self.height()}")
+    
+    def resizeEvent(self, event):
+        """Обработчик изменения размера окна"""
+        super().resizeEvent(event)
+        self.update_size_label()
     
     def delete_text(self):
         cursor = self.text_edit.textCursor()
@@ -348,11 +420,20 @@ class TextEditor(QMainWindow):
             "  • Вставить (Ctrl+V) - вставить текст из буфера\n"
             "  • Удалить (Del) - удалить выделенный текст\n"
             "  • Выделить всё (Ctrl+A) - выделить весь текст\n\n"
+            "👁️ Вид:\n"
+            "  • Области 60/40 - установить пропорции областей\n"
+            "  • Области 50/50 - равные области\n"
+            "  • Области 70/30 - увеличить область ввода\n"
+            "  • Сбросить размер окна - вернуть окно к исходному размеру\n\n"
             "▶ Пуск:\n"
             "  • Запустить синтаксический анализ (F5) - анализ исходного кода\n\n"
             "❓ Справка:\n"
             "  • Справка (F1) - вызов руководства пользователя\n"
-            "  • О программе - информация о программе")
+            "  • О программе - информация о программе\n\n"
+            "📊 Адаптивный дизайн:\n"
+            "  • Изменяйте размер окна - интерфейс подстраивается автоматически\n"
+            "  • Перетаскивайте разделитель областей для изменения пропорций\n"
+            "  • Текущий размер окна отображается в правой части панели инструментов")
     
     def show_about(self):
         QMessageBox.about(self, "О программе",
@@ -360,7 +441,13 @@ class TextEditor(QMainWindow):
             "Версия: 2.0\n\n"
             "Разработчик: Учебный проект\n"
             "Год: 2024\n\n"
-            "Платформа: PyQt6")
+            "Платформа: PyQt6\n\n"
+            "Особенности:\n"
+            "✓ Адаптивный интерфейс\n"
+            "✓ Изменяемые размеры областей\n"
+            "✓ Цветные иконки\n"
+            "✓ Горячие клавиши\n"
+            "✓ Поддержка всех основных операций")
     
     def closeEvent(self, event):
         if self.maybe_save():
