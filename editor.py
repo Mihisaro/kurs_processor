@@ -5,7 +5,6 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 
 class LineNumberArea(QWidget):
-    """Виджет для отображения номеров строк"""
     def __init__(self, editor):
         super().__init__(editor)
         self.code_editor = editor
@@ -18,29 +17,21 @@ class LineNumberArea(QWidget):
 
 
 class CodeEditor(QPlainTextEdit):
-    """Текстовый редактор с нумерацией строк"""
     def __init__(self):
         super().__init__()
         self.line_number_area = LineNumberArea(self)
         
-        # Подключаем сигналы
         self.blockCountChanged.connect(self.update_line_number_area_width)
         self.updateRequest.connect(self.update_line_number_area)
         
-        # Убираем подсветку текущей строки
-        # self.cursorPositionChanged.connect(self.highlight_current_line)
-        
-        # Устанавливаем моноширинный шрифт
         font = QFont("Courier New", 12)
         font.setFixedPitch(True)
         self.setFont(font)
         
-        # Настройка внешнего вида
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.update_line_number_area_width()
         
     def line_number_area_width(self):
-        """Вычисляет ширину области номеров строк"""
         digits = 1
         max_num = max(1, self.blockCount())
         while max_num >= 10:
@@ -51,11 +42,9 @@ class CodeEditor(QPlainTextEdit):
         return space
     
     def update_line_number_area_width(self):
-        """Обновляет ширину области номеров строк"""
         self.setViewportMargins(self.line_number_area_width(), 0, 0, 0)
     
     def update_line_number_area(self, rect, dy):
-        """Обновляет область номеров строк при прокрутке"""
         if dy:
             self.line_number_area.scroll(0, dy)
         else:
@@ -65,19 +54,15 @@ class CodeEditor(QPlainTextEdit):
             self.update_line_number_area_width()
     
     def resizeEvent(self, event):
-        """Обработчик изменения размера"""
         super().resizeEvent(event)
         cr = self.contentsRect()
         self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
     
     def line_number_area_paint_event(self, event):
-        """Отрисовывает номера строк"""
         painter = QPainter(self.line_number_area)
         
-        # Заливаем фон таким же цветом, как панель инструментов (светло-серый)
         painter.fillRect(event.rect(), QColor(245, 245, 245))
         
-        # Рисуем тонкую линию справа от номеров строк
         painter.setPen(QColor(200, 200, 200))
         painter.drawLine(self.line_number_area.width() - 1, event.rect().top(), 
                         self.line_number_area.width() - 1, event.rect().bottom())
@@ -91,7 +76,6 @@ class CodeEditor(QPlainTextEdit):
             if block.isVisible() and bottom >= event.rect().top():
                 number = str(block_number + 1)
                 
-                # Все номера строк одинаковым цветом
                 painter.setPen(QColor(100, 100, 100))
                 
                 painter.drawText(0, top, self.line_number_area.width() - 5, 
@@ -113,91 +97,70 @@ class TextEditor(QMainWindow):
         self.initUI()
         
     def load_language(self):
-        """Загружает сохраненный язык из настроек"""
         settings = QSettings("MyApp", "TextEditor")
         return settings.value("language", "ru")
     
     def save_language(self, language):
-        """Сохраняет выбранный язык в настройки"""
         settings = QSettings("MyApp", "TextEditor")
         settings.setValue("language", language)
     
     def initUI(self):
-        # Настройка окна
         self.setWindowTitle(self.get_text("Текстовый редактор кода"))
         self.setGeometry(100, 100, 1000, 700)
         
-        # Разрешаем изменение размера окна
         self.setMinimumSize(850, 500)
         
-        # Центральный виджет
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Создаем панель инструментов
         self.create_toolbar()
         
-        # --- СОЗДАЕМ ВКЛАДКИ С РЕДАКТОРОМ ---
-        
-        # Главный сплиттер для разделения области редактирования и вывода
         self.main_splitter = QSplitter(Qt.Orientation.Vertical)
         
-        # Верхняя часть - вкладки с текстовыми редакторами
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
         self.tab_widget.currentChanged.connect(self.tab_changed)
         
-        # Создаем первую вкладку
         self.add_new_tab()
         
-        # Нижняя часть - область вывода результатов
         self.output_area = QTextEdit()
         self.output_area.setPlaceholderText(self.get_text("Результаты работы языкового процессора..."))
         self.output_area.setReadOnly(True)
         
-        # Добавляем виджеты в сплиттер
         self.main_splitter.addWidget(self.tab_widget)
         self.main_splitter.addWidget(self.output_area)
         
-        # Устанавливаем начальные размеры
         self.main_splitter.setSizes([int(self.height() * 0.7), int(self.height() * 0.3)])
         self.main_splitter.setChildrenCollapsible(False)
         self.main_splitter.setHandleWidth(5)
         
         main_layout.addWidget(self.main_splitter)
         
-        # Создаем меню
         self.create_menu()
         
-        # Статус бар
         self.statusBar().showMessage(self.get_text("Готов"))
         
     def get_text(self, key):
-        """Возвращает текст на выбранном языке"""
         translations = {
             "ru": {
-                # Общие
                 "Текстовый редактор кода": "Текстовый редактор кода",
                 "Готов": "Готов",
                 "Размер: {}x{}": "Размер: {}x{}",
                 "Размер шрифта: {} pt": "Размер шрифта: {} pt",
                 
-                # Плейсхолдеры
                 "Введите текст программы...": "Введите текст программы...",
                 "Результаты работы языкового процессора...": "Результаты работы языкового процессора...",
                 
-                # Меню
                 "Файл": "Файл",
                 "Правка": "Правка",
                 "Вид": "Вид",
                 "Пуск": "Пуск",
                 "Справка": "Справка",
                 
-                # Файл
                 "Новый": "Новый",
                 "Открыть": "Открыть",
                 "Сохранить": "Сохранить",
@@ -205,7 +168,6 @@ class TextEditor(QMainWindow):
                 "Закрыть вкладку": "Закрыть вкладку",
                 "Выход": "Выход",
                 
-                # Правка
                 "Отмена": "Отмена",
                 "Повтор": "Повтор",
                 "Вырезать": "Вырезать",
@@ -214,7 +176,6 @@ class TextEditor(QMainWindow):
                 "Удалить": "Удалить",
                 "Выделить всё": "Выделить всё",
                 
-                # Вид
                 "Размер текста": "Размер текста",
                 "Увеличить (Ctrl++)": "Увеличить (Ctrl++)",
                 "Уменьшить (Ctrl+-)": "Уменьшить (Ctrl+-)",
@@ -228,14 +189,11 @@ class TextEditor(QMainWindow):
                 "Области 50/50": "Области 50/50",
                 "Сбросить размер окна": "Сбросить размер окна",
                 
-                # Пуск
                 "Запустить": "Запустить",
                 
-                # Справка
                 "Справка": "Справка",
                 "О программе": "О программе",
                 
-                # Диалоги
                 "Открыть файл": "Открыть файл",
                 "Сохранить файл": "Сохранить файл",
                 "Текстовые файлы (*.txt);;Все файлы (*)": "Текстовые файлы (*.txt);;Все файлы (*)",
@@ -245,7 +203,6 @@ class TextEditor(QMainWindow):
                 "Не удалось открыть файл: {}": "Не удалось открыть файл: {}",
                 "Не удалось сохранить файл: {}": "Не удалось сохранить файл: {}",
                 
-                # Статус бар
                 "Новый файл создан": "Новый файл создан",
                 "Открыто: {}": "Открыто: {}",
                 "Сохранено: {}": "Сохранено: {}",
@@ -253,10 +210,8 @@ class TextEditor(QMainWindow):
                 "Новый документ": "Новый документ",
                 "Синтаксический анализ выполнен": "Синтаксический анализ выполнен",
                 
-                # Вкладки
                 "Новый документ {}": "Новый документ {}",
                 
-                # Анализатор
                 "🔍 ЗАПУСК СИНТАКСИЧЕСКОГО АНАЛИЗА": "🔍 ЗАПУСК СИНТАКСИЧЕСКОГО АНАЛИЗА",
                 "Анализируемый текст (вкладка: {}):": "Анализируемый текст (вкладка: {}):",
                 "Результаты анализа:": "Результаты анализа:",
@@ -264,7 +219,6 @@ class TextEditor(QMainWindow):
                 "• Символов: {}": "• Символов: {}",
                 "• Анализ завершен (заглушка)": "• Анализ завершен (заглушка)",
                 
-                # Подсказки на панели инструментов
                 "Создать новый документ (Ctrl+N)": "Создать новый документ (Ctrl+N)",
                 "Открыть документ (Ctrl+O)": "Открыть документ (Ctrl+O)",
                 "Сохранить документ (Ctrl+S)": "Сохранить документ (Ctrl+S)",
@@ -279,29 +233,24 @@ class TextEditor(QMainWindow):
                 "Вызов справки (F1)": "Вызов справки (F1)",
                 "Информация о программе": "Информация о программе",
                 
-                # Сообщение о перезапуске
                 "Смена языка": "Смена языка",
                 "Для применения нового языка необходимо перезапустить приложение. Перезапустить сейчас?": "Для применения нового языка необходимо перезапустить приложение. Перезапустить сейчас?",
             },
             "en": {
-                # Общие
                 "Текстовый редактор кода": "Code Editor",
                 "Готов": "Ready",
                 "Размер: {}x{}": "Size: {}x{}",
                 "Размер шрифта: {} pt": "Font size: {} pt",
                 
-                # Плейсхолдеры
                 "Введите текст программы...": "Enter program text...",
                 "Результаты работы языкового процессора...": "Language processor results...",
                 
-                # Меню
                 "Файл": "File",
                 "Правка": "Edit",
                 "Вид": "View",
                 "Пуск": "Run",
                 "Справка": "Help",
                 
-                # Файл
                 "Новый": "New",
                 "Открыть": "Open",
                 "Сохранить": "Save",
@@ -309,7 +258,6 @@ class TextEditor(QMainWindow):
                 "Закрыть вкладку": "Close Tab",
                 "Выход": "Exit",
                 
-                # Правка
                 "Отмена": "Undo",
                 "Повтор": "Redo",
                 "Вырезать": "Cut",
@@ -318,7 +266,6 @@ class TextEditor(QMainWindow):
                 "Удалить": "Delete",
                 "Выделить всё": "Select All",
                 
-                # Вид
                 "Размер текста": "Text Size",
                 "Увеличить (Ctrl++)": "Increase (Ctrl++)",
                 "Уменьшить (Ctrl+-)": "Decrease (Ctrl+-)",
@@ -331,14 +278,11 @@ class TextEditor(QMainWindow):
                 "Области 50/50": "Areas 50/50",
                 "Сбросить размер окна": "Reset Window Size",
                 
-                # Пуск
                 "Запустить": "Run",
                 
-                # Справка
                 "Справка": "Help",
                 "О программе": "About",
                 
-                # Диалоги
                 "Открыть файл": "Open File",
                 "Сохранить файл": "Save File",
                 "Текстовые файлы (*.txt);;Все файлы (*)": "Text files (*.txt);;All files (*)",
@@ -348,7 +292,6 @@ class TextEditor(QMainWindow):
                 "Не удалось открыть файл: {}": "Could not open file: {}",
                 "Не удалось сохранить файл: {}": "Could not save file: {}",
                 
-                # Статус бар
                 "Новый файл создан": "New file created",
                 "Открыто: {}": "Opened: {}",
                 "Сохранено: {}": "Saved: {}",
@@ -356,10 +299,8 @@ class TextEditor(QMainWindow):
                 "Новый документ": "New document",
                 "Синтаксический анализ выполнен": "Syntax analysis completed",
                 
-                # Вкладки
                 "Новый документ {}": "New document {}",
                 
-                # Анализатор
                 "🔍 ЗАПУСК СИНТАКСИЧЕСКОГО АНАЛИЗА": "🔍 SYNTAX ANALYSIS START",
                 "Анализируемый текст (вкладка: {}):": "Analyzed text (tab: {}):",
                 "Результаты анализа:": "Analysis results:",
@@ -367,7 +308,6 @@ class TextEditor(QMainWindow):
                 "• Символов: {}": "• Characters: {}",
                 "• Анализ завершен (заглушка)": "• Analysis completed (stub)",
                 
-                # Подсказки на панели инструментов
                 "Создать новый документ (Ctrl+N)": "Create new document (Ctrl+N)",
                 "Открыть документ (Ctrl+O)": "Open document (Ctrl+O)",
                 "Сохранить документ (Ctrl+S)": "Save document (Ctrl+S)",
@@ -382,7 +322,6 @@ class TextEditor(QMainWindow):
                 "Вызов справки (F1)": "Show help (F1)",
                 "Информация о программе": "About program",
                 
-                # Сообщение о перезапуске
                 "Смена языка": "Language Change",
                 "Для применения нового языка необходимо перезапустить приложение. Перезапустить сейчас?": "To apply the new language, you need to restart the application. Restart now?",
             }
@@ -391,7 +330,6 @@ class TextEditor(QMainWindow):
         return translations[self.current_language].get(key, key)
     
     def change_language(self, language):
-        """Изменяет язык интерфейса"""
         if language != self.current_language:
             reply = QMessageBox.question(
                 self, 
@@ -406,26 +344,20 @@ class TextEditor(QMainWindow):
                 sys.exit()
     
     def toggle_line_numbers(self):
-        """Включает/выключает отображение номеров строк"""
         current_editor = self.get_current_text_edit()
         if current_editor:
-            # В нашем редакторе номера строк всегда включены
             pass
     
     def add_new_tab(self, content="", filename=None):
-        """Добавляет новую вкладку с текстовым редактором"""
         text_edit = CodeEditor()
         text_edit.setPlainText(content)
         
-        # Устанавливаем размер шрифта
         font = QFont("Courier New", self.font_size)
         font.setFixedPitch(True)
         text_edit.setFont(font)
         
-        # Подключаем сигнал изменения текста
         text_edit.textChanged.connect(lambda: self.update_tab_title(text_edit))
         
-        # Определяем название вкладки
         if filename:
             tab_name = os.path.basename(filename)
             text_edit.setProperty("file_path", filename)
@@ -433,20 +365,17 @@ class TextEditor(QMainWindow):
             tab_name = self.get_text("Новый документ {}").format(self.tab_widget.count() + 1)
             text_edit.setProperty("file_path", None)
         
-        # Добавляем вкладку
         tab_index = self.tab_widget.addTab(text_edit, tab_name)
         self.tab_widget.setCurrentIndex(tab_index)
         
         return text_edit
     
     def get_current_text_edit(self):
-        """Возвращает текущий текстовый редактор"""
         if self.tab_widget and self.tab_widget.currentWidget():
             return self.tab_widget.currentWidget()
         return None
     
     def close_tab(self, index):
-        """Закрывает вкладку"""
         if self.tab_widget.count() <= 1:
             if self.maybe_save_tab(index):
                 self.tab_widget.removeTab(index)
@@ -456,7 +385,6 @@ class TextEditor(QMainWindow):
                 self.tab_widget.removeTab(index)
     
     def tab_changed(self, index):
-        """Обработчик смены вкладки"""
         text_edit = self.tab_widget.widget(index)
         if text_edit:
             file_path = text_edit.property("file_path")
@@ -466,7 +394,6 @@ class TextEditor(QMainWindow):
                 self.statusBar().showMessage(self.get_text("Новый документ"))
     
     def update_tab_title(self, text_edit):
-        """Обновляет заголовок вкладки"""
         index = self.tab_widget.indexOf(text_edit)
         if index >= 0:
             current_title = self.tab_widget.tabText(index)
@@ -474,7 +401,6 @@ class TextEditor(QMainWindow):
                 self.tab_widget.setTabText(index, current_title + "*")
     
     def maybe_save_tab(self, index):
-        """Проверяет, нужно ли сохранить изменения"""
         text_edit = self.tab_widget.widget(index)
         if not text_edit.document().isModified():
             return True
@@ -496,7 +422,6 @@ class TextEditor(QMainWindow):
             return False
     
     def update_font_size(self):
-        """Обновляет размер шрифта"""
         font = QFont("Courier New", self.font_size)
         font.setFixedPitch(True)
         for i in range(self.tab_widget.count()):
@@ -504,7 +429,6 @@ class TextEditor(QMainWindow):
             text_edit.setFont(font)
     
     def resizeEvent(self, event):
-        """Обработчик изменения размера окна"""
         super().resizeEvent(event)
         self.update_size_label()
     
@@ -512,7 +436,6 @@ class TextEditor(QMainWindow):
         menubar = self.menuBar()
         menubar.clear()
         
-        # Меню Файл
         file_menu = menubar.addMenu(self.get_text("Файл"))
         
         new_action = QAction(self.get_text("Новый"), self)
@@ -549,7 +472,6 @@ class TextEditor(QMainWindow):
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
-        # Меню Правка
         edit_menu = menubar.addMenu(self.get_text("Правка"))
         
         undo_action = QAction(self.get_text("Отмена"), self)
@@ -591,10 +513,8 @@ class TextEditor(QMainWindow):
         select_all_action.triggered.connect(lambda: self.get_current_text_edit().selectAll() if self.get_current_text_edit() else None)
         edit_menu.addAction(select_all_action)
         
-        # Меню Вид
         view_menu = menubar.addMenu(self.get_text("Вид"))
         
-        # Подменю для размера текста
         text_size_menu = view_menu.addMenu(self.get_text("Размер текста"))
         
         increase_font = QAction(self.get_text("Увеличить (Ctrl++)"), self)
@@ -625,16 +545,14 @@ class TextEditor(QMainWindow):
         
         view_menu.addSeparator()
         
-        # Нумерация строк (всегда включена)
         line_numbers_action = QAction(self.get_text("Показать номера строк"), self)
         line_numbers_action.setCheckable(True)
         line_numbers_action.setChecked(True)
-        line_numbers_action.setEnabled(False)  # Всегда включено
+        line_numbers_action.setEnabled(False)
         view_menu.addAction(line_numbers_action)
         
         view_menu.addSeparator()
         
-        # Подменю для выбора языка
         language_menu = view_menu.addMenu(self.get_text("Язык интерфейса"))
         
         russian_action = QAction(self.get_text("Русский"), self)
@@ -651,7 +569,6 @@ class TextEditor(QMainWindow):
         
         view_menu.addSeparator()
         
-        # Действия для изменения соотношения областей
         split_70_30 = QAction(self.get_text("Области 70/30"), self)
         split_70_30.triggered.connect(lambda: self.main_splitter.setSizes([int(self.height() * 0.7), int(self.height() * 0.3)]))
         view_menu.addAction(split_70_30)
@@ -670,7 +587,6 @@ class TextEditor(QMainWindow):
         reset_size_action.triggered.connect(lambda: self.setGeometry(100, 100, 1000, 700))
         view_menu.addAction(reset_size_action)
         
-        # Меню Пуск
         run_menu = menubar.addMenu(self.get_text("Пуск"))
         
         run_action = QAction(self.get_text("Запустить"), self)
@@ -678,7 +594,6 @@ class TextEditor(QMainWindow):
         run_action.triggered.connect(self.run_analyzer)
         run_menu.addAction(run_action)
         
-        # Меню Справка
         help_menu = menubar.addMenu(self.get_text("Справка"))
         
         help_action = QAction(self.get_text("Справка"), self)
@@ -691,7 +606,6 @@ class TextEditor(QMainWindow):
         help_menu.addAction(about_action)
         
     def create_colored_icon(self, text, color, bg_color=Qt.GlobalColor.white):
-        """Создает цветную иконку"""
         pixmap = QPixmap(32, 32)
         pixmap.fill(Qt.GlobalColor.transparent)
         
@@ -716,10 +630,8 @@ class TextEditor(QMainWindow):
         toolbar.setIconSize(QSize(32, 32))
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
         
-        # Очищаем тулбар перед созданием
         toolbar.clear()
         
-        # Кнопки
         new_btn = QAction(self.create_colored_icon("+", "#0078D7", "#E6F2FF"), self.get_text("Новый"), self)
         new_btn.setToolTip(self.get_text("Создать новый документ (Ctrl+N)"))
         new_btn.triggered.connect(self.new_file)
@@ -766,7 +678,6 @@ class TextEditor(QMainWindow):
         
         toolbar.addSeparator()
         
-        # Элементы управления размером шрифта
         font_widget = QWidget()
         font_layout = QHBoxLayout(font_widget)
         font_layout.setContentsMargins(5, 0, 5, 0)
@@ -809,8 +720,6 @@ class TextEditor(QMainWindow):
         toolbar.addWidget(font_widget)
         
         toolbar.addSeparator()
-        
-
         
         toolbar.addSeparator()
         
@@ -918,12 +827,10 @@ class TextEditor(QMainWindow):
         self.output_area.append("=" * 50)
         self.output_area.append(self.get_text("Результаты анализа:"))
         
-        # Подсчет строк с учетом номеров
         lines = text.split('\n')
         self.output_area.append(self.get_text("• Строк для анализа: {}").format(len(lines)))
         self.output_area.append(self.get_text("• Символов: {}").format(len(text)))
         
-        # Показываем первые 5 строк с номерами для примера
         self.output_area.append(self.get_text("• Первые строки:"))
         for i, line in enumerate(lines[:5]):
             self.output_area.append(f"{i+1:3d}: {line[:50]}")
