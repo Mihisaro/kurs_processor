@@ -23,5 +23,23 @@ Python и PyQt6
 2. Запустите: python main.py
 
 
+# Руководство к пользованию
 
-![alt text](image.png)
+1. Панель инструментов 
+<img width="931" height="677" alt="image" src="https://github.com/user-attachments/assets/4b80fdff-2a54-4daa-9559-eac915453b25" />
+
+2. Работа с файлами
+<img width="407" height="421" alt="image" src="https://github.com/user-attachments/assets/fb8ac1f6-2860-4ef1-afa4-74e60e4f2991" />
+
+3. Настройка интерфейса
+<img width="634" height="482" alt="image" src="https://github.com/user-attachments/assets/17838630-612a-4624-8bc3-d592c567ce77" />
+
+Изменение размера шрифта, языка, область окна
+
+5. Информация о программе
+<img width="568" height="259" alt="image" src="https://github.com/user-attachments/assets/a9191c50-ff9b-4952-a025-ee84a3bba40e" />
+
+
+
+
+
