@@ -549,6 +549,6 @@ class LexicalAnalyzer:
         
         # Проверка позиции 7: ;
         if significant_tokens[6].type != TokenType.SEMICOLON:
-            return False, f"Ошибка: ожидается ';', получен {significant_tokens[6].type.description}"
+            return False, f"Ошибка:ожидается ';', получен {significant_tokens[6].type.description}"
         
         return True, "Корректное объявление целочисленной константы"

@@ -851,7 +851,6 @@ class TextEditor(QMainWindow):
                 cursor.removeSelectedText()
     
     def run_analyzer(self):
-        """Запуск лексического анализатора"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
