@@ -3,6 +3,7 @@ import os
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
+from lexical_analyzer import LexicalAnalyzer, TokenType
 
 class LineNumberArea(QWidget):
     def __init__(self, editor):
@@ -94,6 +95,7 @@ class TextEditor(QMainWindow):
         self.current_file = None
         self.font_size = 12
         self.current_language = self.load_language()
+        self.analyzer = LexicalAnalyzer()
         self.initUI()
         
     def load_language(self):
@@ -127,12 +129,33 @@ class TextEditor(QMainWindow):
         
         self.add_new_tab()
         
-        self.output_area = QTextEdit()
-        self.output_area.setPlaceholderText(self.get_text("Результаты работы языкового процессора..."))
-        self.output_area.setReadOnly(True)
+        # Создаем таблицу для результатов анализа
+        self.results_table = QTableWidget()
+        self.results_table.setColumnCount(5)
+        self.results_table.setHorizontalHeaderLabels([
+            self.get_text("Код"), 
+            self.get_text("Тип лексемы"), 
+            self.get_text("Лексема"), 
+            self.get_text("Строка"), 
+            self.get_text("Позиция")
+        ])
+        self.results_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.results_table.setAlternatingRowColors(True)
+        self.results_table.setSortingEnabled(True)
+        
+        # Настройка внешнего вида таблицы
+        header = self.results_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Код
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Тип
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Лексема
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Строка
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Позиция
+        
+        # Подключаем обработчик клика по элементу таблицы
+        self.results_table.itemClicked.connect(self.on_result_item_clicked)
         
         self.main_splitter.addWidget(self.tab_widget)
-        self.main_splitter.addWidget(self.output_area)
+        self.main_splitter.addWidget(self.results_table)
         
         self.main_splitter.setSizes([int(self.height() * 0.7), int(self.height() * 0.3)])
         self.main_splitter.setChildrenCollapsible(False)
@@ -153,7 +176,7 @@ class TextEditor(QMainWindow):
                 "Размер шрифта: {} pt": "Размер шрифта: {} pt",
                 
                 "Введите текст программы...": "Введите текст программы...",
-                "Результаты работы языкового процессора...": "Результаты работы языкового процессора...",
+                "Результаты работы лексического анализатора...": "Результаты работы лексического анализатора...",
                 
                 "Файл": "Файл",
                 "Правка": "Правка",
@@ -208,16 +231,15 @@ class TextEditor(QMainWindow):
                 "Сохранено: {}": "Сохранено: {}",
                 "Текущий файл: {}": "Текущий файл: {}",
                 "Новый документ": "Новый документ",
-                "Синтаксический анализ выполнен": "Синтаксический анализ выполнен",
+                "Лексический анализ выполнен": "Лексический анализ выполнен",
                 
                 "Новый документ {}": "Новый документ {}",
                 
-                "🔍 ЗАПУСК СИНТАКСИЧЕСКОГО АНАЛИЗА": "🔍 ЗАПУСК СИНТАКСИЧЕСКОГО АНАЛИЗА",
-                "Анализируемый текст (вкладка: {}):": "Анализируемый текст (вкладка: {}):",
+                "🔍 ЗАПУСК ЛЕКСИЧЕСКОГО АНАЛИЗА": "🔍 ЗАПУСК ЛЕКСИЧЕСКОГО АНАЛИЗА",
                 "Результаты анализа:": "Результаты анализа:",
-                "• Строк для анализа: {}": "• Строк для анализа: {}",
-                "• Символов: {}": "• Символов: {}",
-                "• Анализ завершен (заглушка)": "• Анализ завершен (заглушка)",
+                "• Найдено лексем: {}": "• Найдено лексем: {}",
+                "• Обнаружено ошибок: {}": "• Обнаружено ошибок: {}",
+                "• Анализ завершен": "• Анализ завершен",
                 
                 "Создать новый документ (Ctrl+N)": "Создать новый документ (Ctrl+N)",
                 "Открыть документ (Ctrl+O)": "Открыть документ (Ctrl+O)",
@@ -229,12 +251,22 @@ class TextEditor(QMainWindow):
                 "Вставить текст из буфера (Ctrl+V)": "Вставить текст из буфера (Ctrl+V)",
                 "Уменьшить размер текста (Ctrl+-)": "Уменьшить размер текста (Ctrl+-)",
                 "Увеличить размер текста (Ctrl++)": "Увеличить размер текста (Ctrl++)",
-                "Запустить синтаксический анализ (F5)": "Запустить синтаксический анализ (F5)",
+                "Запустить лексический анализ (F5)": "Запустить лексический анализ (F5)",
                 "Вызов справки (F1)": "Вызов справки (F1)",
                 "Информация о программе": "Информация о программе",
                 
                 "Смена языка": "Смена языка",
                 "Для применения нового языка необходимо перезапустить приложение. Перезапустить сейчас?": "Для применения нового языка необходимо перезапустить приложение. Перезапустить сейчас?",
+                
+                "Код": "Код",
+                "Тип лексемы": "Тип лексемы",
+                "Лексема": "Лексема",
+                "Строка": "Строка",
+                "Позиция": "Позиция",
+                
+                "Всего лексем: {} | Ошибок: {}": "Всего лексем: {} | Ошибок: {}",
+                
+                "Кликните на ошибку для перехода к позиции": "Кликните на ошибку для перехода к позиции",
             },
             "en": {
                 "Текстовый редактор кода": "Code Editor",
@@ -243,7 +275,7 @@ class TextEditor(QMainWindow):
                 "Размер шрифта: {} pt": "Font size: {} pt",
                 
                 "Введите текст программы...": "Enter program text...",
-                "Результаты работы языкового процессора...": "Language processor results...",
+                "Результаты работы лексического анализатора...": "Lexical analyzer results...",
                 
                 "Файл": "File",
                 "Правка": "Edit",
@@ -297,16 +329,15 @@ class TextEditor(QMainWindow):
                 "Сохранено: {}": "Saved: {}",
                 "Текущий файл: {}": "Current file: {}",
                 "Новый документ": "New document",
-                "Синтаксический анализ выполнен": "Syntax analysis completed",
+                "Лексический анализ выполнен": "Lexical analysis completed",
                 
                 "Новый документ {}": "New document {}",
                 
-                "🔍 ЗАПУСК СИНТАКСИЧЕСКОГО АНАЛИЗА": "🔍 SYNTAX ANALYSIS START",
-                "Анализируемый текст (вкладка: {}):": "Analyzed text (tab: {}):",
+                "🔍 ЗАПУСК ЛЕКСИЧЕСКОГО АНАЛИЗА": "🔍 LEXICAL ANALYSIS START",
                 "Результаты анализа:": "Analysis results:",
-                "• Строк для анализа: {}": "• Lines to analyze: {}",
-                "• Символов: {}": "• Characters: {}",
-                "• Анализ завершен (заглушка)": "• Analysis completed (stub)",
+                "• Найдено лексем: {}": "• Tokens found: {}",
+                "• Обнаружено ошибок: {}": "• Errors detected: {}",
+                "• Анализ завершен": "• Analysis completed",
                 
                 "Создать новый документ (Ctrl+N)": "Create new document (Ctrl+N)",
                 "Открыть документ (Ctrl+O)": "Open document (Ctrl+O)",
@@ -318,12 +349,22 @@ class TextEditor(QMainWindow):
                 "Вставить текст из буфера (Ctrl+V)": "Paste text from clipboard (Ctrl+V)",
                 "Уменьшить размер текста (Ctrl+-)": "Decrease text size (Ctrl+-)",
                 "Увеличить размер текста (Ctrl++)": "Increase text size (Ctrl++)",
-                "Запустить синтаксический анализ (F5)": "Run syntax analysis (F5)",
+                "Запустить лексический анализ (F5)": "Run lexical analysis (F5)",
                 "Вызов справки (F1)": "Show help (F1)",
                 "Информация о программе": "About program",
                 
                 "Смена языка": "Language Change",
                 "Для применения нового языка необходимо перезапустить приложение. Перезапустить сейчас?": "To apply the new language, you need to restart the application. Restart now?",
+                
+                "Код": "Code",
+                "Тип лексемы": "Token Type",
+                "Лексема": "Lexeme",
+                "Строка": "Line",
+                "Позиция": "Position",
+                
+                "Всего лексем: {} | Ошибок: {}": "Total tokens: {} | Errors: {}",
+                
+                "Кликните на ошибку для перехода к позиции": "Click on error to navigate to position",
             }
         }
         
@@ -721,10 +762,8 @@ class TextEditor(QMainWindow):
         
         toolbar.addSeparator()
         
-        toolbar.addSeparator()
-        
         run_btn = QAction(self.create_colored_icon("▶", "#107C10", "#E6FFE6"), self.get_text("Пуск"), self)
-        run_btn.setToolTip(self.get_text("Запустить синтаксический анализ (F5)"))
+        run_btn.setToolTip(self.get_text("Запустить лексический анализ (F5)"))
         run_btn.triggered.connect(self.run_analyzer)
         toolbar.addAction(run_btn)
         
@@ -812,38 +851,140 @@ class TextEditor(QMainWindow):
                 cursor.removeSelectedText()
     
     def run_analyzer(self):
+        """Запуск лексического анализатора"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
-            
+        
         text = text_edit.toPlainText()
         
-        self.output_area.clear()
-        self.output_area.append(self.get_text("🔍 ЗАПУСК СИНТАКСИЧЕСКОГО АНАЛИЗА"))
-        self.output_area.append("=" * 50)
-        self.output_area.append(self.get_text("Анализируемый текст (вкладка: {}):").format(
-            self.tab_widget.tabText(self.tab_widget.currentIndex())))
-        self.output_area.append(text)
-        self.output_area.append("=" * 50)
-        self.output_area.append(self.get_text("Результаты анализа:"))
+        # Очищаем таблицу
+        self.results_table.setRowCount(0)
+        self.results_table.setSortingEnabled(False)
         
-        lines = text.split('\n')
-        self.output_area.append(self.get_text("• Строк для анализа: {}").format(len(lines)))
-        self.output_area.append(self.get_text("• Символов: {}").format(len(text)))
+        # Запускаем анализ
+        tokens = self.analyzer.analyze(text)
         
-        self.output_area.append(self.get_text("• Первые строки:"))
-        for i, line in enumerate(lines[:5]):
-            self.output_area.append(f"{i+1:3d}: {line[:50]}")
+        # Заполняем таблицу результатами
+        self.results_table.setRowCount(len(tokens))
         
-        self.output_area.append(self.get_text("• Анализ завершен (заглушка)"))
-        self.output_area.append("=" * 50)
-        self.statusBar().showMessage(self.get_text("Синтаксический анализ выполнен"))
+        error_count = 0
+        for row, token in enumerate(tokens):
+            # Код
+            code_item = QTableWidgetItem(str(token.type.code))
+            code_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            # Тип лексемы
+            type_item = QTableWidgetItem(token.type.description)
+            
+            # Лексема (специальная обработка для пробельных символов)
+            value = token.value
+            if token.type == TokenType.SPACE:
+                value = value.replace(' ', '·')  # Отображаем пробелы как точки
+            elif token.type == TokenType.TAB:
+                value = value.replace('\t', '→')  # Отображаем табуляцию как стрелку
+            elif token.type == TokenType.NEWLINE:
+                value = '¶'  # Отображаем перевод строки как символ пилькроу
+            
+            value_item = QTableWidgetItem(value)
+            
+            # Строка
+            line_item = QTableWidgetItem(str(token.line))
+            line_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            # Позиция
+            pos_item = QTableWidgetItem(f"{token.start_pos}-{token.end_pos}")
+            pos_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            # Сохраняем токен в item для навигации
+            value_item.setData(Qt.ItemDataRole.UserRole, token)
+            
+            # Подсвечиваем ТОЛЬКО ОШИБКИ красным
+            if token.is_error:
+                error_count += 1
+                red_bg = QColor(255, 200, 200)
+                red_fg = QColor(255, 0, 0)
+                for item in [code_item, type_item, value_item, line_item, pos_item]:
+                    item.setBackground(red_bg)
+                    item.setForeground(red_fg)
+                    item.setToolTip(self.get_text("Кликните на ошибку для перехода к позиции"))
+            
+            self.results_table.setItem(row, 0, code_item)
+            self.results_table.setItem(row, 1, type_item)
+            self.results_table.setItem(row, 2, value_item)
+            self.results_table.setItem(row, 3, line_item)
+            self.results_table.setItem(row, 4, pos_item)
+        
+        # Включаем сортировку обратно
+        self.results_table.setSortingEnabled(True)
+        
+        # Сортируем по строке и позиции
+        self.results_table.sortItems(3, Qt.SortOrder.AscendingOrder)
+        
+        # Обновляем статус
+        status = self.get_text("Всего лексем: {} | Ошибок: {}").format(len(tokens), error_count)
+        self.statusBar().showMessage(status)
+        
+        # Если есть ошибки, показываем подсказку
+        if error_count > 0:
+            QToolTip.showText(
+                self.results_table.mapToGlobal(QPoint(10, 10)),
+                self.get_text("Кликните на ошибку для перехода к позиции")
+            )
+        
+        # Также запускаем валидацию структуры
+        if tokens:
+            is_valid, message = self.analyzer.validate_const_declaration(tokens)
+            if not is_valid:
+                # Добавляем сообщение о структурной ошибке в статус
+                self.statusBar().showMessage(f"{status} | {message}")
+    
+    def on_result_item_clicked(self, item):
+        """Обработчик клика по элементу таблицы"""
+        # Получаем токен из соответствующей строки
+        token_item = self.results_table.item(item.row(), 2)  # колонка с лексемой
+        if token_item:
+            token = token_item.data(Qt.ItemDataRole.UserRole)
+            if token:
+                self.jump_to_token(token)
+    
+    def jump_to_token(self, token):
+        """Переход к позиции токена в редакторе"""
+        text_edit = self.get_current_text_edit()
+        if not text_edit:
+            return
+        
+        # Находим позицию в тексте
+        cursor = text_edit.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        
+        # Переходим к нужной строке
+        for _ in range(token.line - 1):
+            cursor.movePosition(QTextCursor.MoveOperation.NextBlock)
+        
+        # Переходим к начальной позиции (1-based to 0-based)
+        cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
+                            QTextCursor.MoveMode.MoveAnchor, 
+                            token.start_pos - 1)
+        
+        # Выделяем токен
+        cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
+                            QTextCursor.MoveMode.KeepAnchor, 
+                            len(token.value))
+        
+        text_edit.setTextCursor(cursor)
+        text_edit.setFocus()
+        
+        # Центрируем вид на курсоре
+        text_edit.centerCursor()
     
     def new_file(self):
+        """Создание нового файла"""
         self.add_new_tab()
         self.statusBar().showMessage(self.get_text("Новый файл создан"))
     
     def open_file(self):
+        """Открытие файла"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, self.get_text("Открыть файл"), "", 
             self.get_text("Текстовые файлы (*.txt);;Все файлы (*)")
@@ -859,6 +1000,7 @@ class TextEditor(QMainWindow):
                                     self.get_text("Не удалось открыть файл: {}").format(str(e)))
     
     def save_current_file(self):
+        """Сохранение текущего файла"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return False
@@ -872,6 +1014,7 @@ class TextEditor(QMainWindow):
                 text_edit.document().setModified(False)
                 current_title = self.tab_widget.tabText(self.tab_widget.currentIndex())
                 self.tab_widget.setTabText(self.tab_widget.currentIndex(), current_title.rstrip("*"))
+                self.statusBar().showMessage(self.get_text("Сохранено: {}").format(file_path))
                 return True
             except Exception as e:
                 QMessageBox.critical(self, self.get_text("Ошибка"), 
@@ -881,9 +1024,11 @@ class TextEditor(QMainWindow):
             return self.save_as_file()
     
     def save_file(self):
+        """Сохранение файла"""
         self.save_current_file()
     
     def save_as_file(self):
+        """Сохранение файла как"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return False
@@ -908,6 +1053,7 @@ class TextEditor(QMainWindow):
         return False
     
     def closeEvent(self, event):
+        """Обработка закрытия окна"""
         for i in range(self.tab_widget.count()):
             if not self.maybe_save_tab(i):
                 event.ignore()
@@ -915,8 +1061,10 @@ class TextEditor(QMainWindow):
         event.accept()
     
     def show_help(self):
+        """Показ справки"""
         help_text = self.get_text("РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ") + "\n\n"
         help_text += self.get_text("Функции программы:") + "\n\n"
+        
         help_text += self.get_text("📄 Файл:") + "\n"
         help_text += self.get_text("  • Новый (Ctrl+N) - создать новый документ в новой вкладке") + "\n"
         help_text += self.get_text("  • Открыть (Ctrl+O) - открыть файл в новой вкладке") + "\n"
@@ -945,8 +1093,18 @@ class TextEditor(QMainWindow):
         help_text += self.get_text("  • Пропорции областей: 70/30, 60/40, 50/50") + "\n"
         help_text += self.get_text("  • Сбросить размер окна") + "\n\n"
         
+        help_text += self.get_text("📊 Лексический анализатор:") + "\n"
+        help_text += self.get_text("  • Запуск (F5) - выполнить лексический анализ") + "\n"
+        help_text += self.get_text("  • Распознает объявления целочисленных констант в Rust") + "\n"
+        help_text += self.get_text("  • Классифицирует по типам с числовыми кодами") + "\n"
+        help_text += self.get_text("  • Отображает позицию каждой лексемы (строка, начальная-конечная позиция)") + "\n"
+        help_text += self.get_text("  • Подсвечивает ошибки красным цветом") + "\n"
+        help_text += self.get_text("  • Навигация по ошибкам: клик по ошибке в таблице") + "\n"
+        help_text += self.get_text("    - Курсор автоматически переходит к позиции ошибки") + "\n"
+        help_text += self.get_text("    - Токен выделяется в редакторе") + "\n\n"
+        
         help_text += self.get_text("▶ Пуск:") + "\n"
-        help_text += self.get_text("  • Запустить синтаксический анализ (F5)") + "\n\n"
+        help_text += self.get_text("  • Запустить лексический анализ (F5)") + "\n\n"
         
         help_text += self.get_text("❓ Справка:") + "\n"
         help_text += self.get_text("  • Справка (F1) - вызов руководства пользователя") + "\n"
@@ -960,23 +1118,24 @@ class TextEditor(QMainWindow):
         QMessageBox.information(self, self.get_text("Справка"), help_text)
     
     def show_about(self):
-        about_text = self.get_text("КОМПИЛЯТОР - Языковой процессор") + "\n\n"
-        about_text += self.get_text("Версия: 4.0") + "\n\n"
+        """Показ информации о программе"""
+        about_text = self.get_text("КОМПИЛЯТОР - Лексический анализатор") + "\n\n"
+        about_text += self.get_text("Версия: 5.0") + "\n\n"
         about_text += self.get_text("Разработчик: Учебный проект") + "\n"
         about_text += self.get_text("Год: 2024") + "\n\n"
         about_text += self.get_text("Платформа: PyQt6") + "\n\n"
-        about_text += self.get_text("Новые возможности:") + "\n"
-        about_text += self.get_text("✓ Многодокументный интерфейс с вкладками") + "\n"
-        about_text += self.get_text("✓ Одновременная работа с несколькими файлами") + "\n"
-        about_text += self.get_text("✓ Нумерация строк в редакторе") + "\n"
-        about_text += self.get_text("✓ Визуальная индикация несохраненных изменений (*)") + "\n"
-        about_text += self.get_text("✓ Закрытие вкладок с подтверждением") + "\n"
-        about_text += self.get_text("✓ Выбор языка интерфейса (русский/английский)") + "\n\n"
+        about_text += self.get_text("Новые возможности версии 5.0:") + "\n"
+        about_text += self.get_text("✓ Лексический анализатор для объявлений целочисленных констант Rust") + "\n"
+        about_text += self.get_text("✓ Распознавание всех типов лексем") + "\n"
+        about_text += self.get_text("✓ Таблица результатов с сортировкой") + "\n"
+        about_text += self.get_text("✓ Навигация по ошибкам (клик - переход к позиции)") + "\n"
+        about_text += self.get_text("✓ Подсветка ошибок красным цветом") + "\n\n"
+        
         about_text += self.get_text("Другие особенности:") + "\n"
-        about_text += self.get_text("✓ Адаптивный интерфейс") + "\n"
-        about_text += self.get_text("✓ Изменяемые размеры областей") + "\n"
-        about_text += self.get_text("✓ Выпадающий список размеров текста") + "\n"
-        about_text += self.get_text("✓ Цветные иконки") + "\n"
-        about_text += self.get_text("✓ Горячие клавиши")
+        about_text += self.get_text("✓ Многодокументный интерфейс с вкладками") + "\n"
+        about_text += self.get_text("✓ Нумерация строк в редакторе") + "\n"
+        about_text += self.get_text("✓ Выбор языка интерфейса (русский/английский)") + "\n"
+        about_text += self.get_text("✓ Адаптивный интерфейс с изменяемыми областями") + "\n"
+        about_text += self.get_text("✓ Горячие клавиши для всех основных операций")
         
         QMessageBox.about(self, self.get_text("О программе"), about_text)

@@ -25,3 +25,4 @@ Python и PyQt6
 
 
 ![alt text](image.png)
+
