@@ -129,7 +129,6 @@ class TextEditor(QMainWindow):
         
         self.add_new_tab()
         
-        # Создаем таблицу для результатов анализа
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(5)
         self.results_table.setHorizontalHeaderLabels([
@@ -143,15 +142,13 @@ class TextEditor(QMainWindow):
         self.results_table.setAlternatingRowColors(True)
         self.results_table.setSortingEnabled(True)
         
-        # Настройка внешнего вида таблицы
         header = self.results_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Код
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Тип
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)  # Лексема
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Строка
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Позиция
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
-        # Подключаем обработчик клика по элементу таблицы
         self.results_table.itemClicked.connect(self.on_result_item_clicked)
         
         self.main_splitter.addWidget(self.tab_widget)
@@ -857,48 +854,38 @@ class TextEditor(QMainWindow):
         
         text = text_edit.toPlainText()
         
-        # Очищаем таблицу
         self.results_table.setRowCount(0)
         self.results_table.setSortingEnabled(False)
         
-        # Запускаем анализ
         tokens = self.analyzer.analyze(text)
         
-        # Заполняем таблицу результатами
         self.results_table.setRowCount(len(tokens))
         
         error_count = 0
         for row, token in enumerate(tokens):
-            # Код
             code_item = QTableWidgetItem(str(token.type.code))
             code_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            # Тип лексемы
             type_item = QTableWidgetItem(token.type.description)
             
-            # Лексема (специальная обработка для пробельных символов)
             value = token.value
             if token.type == TokenType.SPACE:
-                value = value.replace(' ', '·')  # Отображаем пробелы как точки
+                value = value.replace(' ', '(пробел)')
             elif token.type == TokenType.TAB:
-                value = value.replace('\t', '→')  # Отображаем табуляцию как стрелку
+                value = value.replace('\t', '→')
             elif token.type == TokenType.NEWLINE:
-                value = '¶'  # Отображаем перевод строки как символ пилькроу
+                value = '/n'
             
             value_item = QTableWidgetItem(value)
             
-            # Строка
             line_item = QTableWidgetItem(str(token.line))
             line_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            # Позиция
             pos_item = QTableWidgetItem(f"{token.start_pos}-{token.end_pos}")
             pos_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            # Сохраняем токен в item для навигации
             value_item.setData(Qt.ItemDataRole.UserRole, token)
             
-            # Подсвечиваем ТОЛЬКО ОШИБКИ красным
             if token.is_error:
                 error_count += 1
                 red_bg = QColor(255, 200, 200)
@@ -914,59 +901,46 @@ class TextEditor(QMainWindow):
             self.results_table.setItem(row, 3, line_item)
             self.results_table.setItem(row, 4, pos_item)
         
-        # Включаем сортировку обратно
         self.results_table.setSortingEnabled(True)
         
-        # Сортируем по строке и позиции
         self.results_table.sortItems(3, Qt.SortOrder.AscendingOrder)
         
-        # Обновляем статус
         status = self.get_text("Всего лексем: {} | Ошибок: {}").format(len(tokens), error_count)
         self.statusBar().showMessage(status)
         
-        # Если есть ошибки, показываем подсказку
         if error_count > 0:
             QToolTip.showText(
                 self.results_table.mapToGlobal(QPoint(10, 10)),
                 self.get_text("Кликните на ошибку для перехода к позиции")
             )
         
-        # Также запускаем валидацию структуры
         if tokens:
             is_valid, message = self.analyzer.validate_const_declaration(tokens)
             if not is_valid:
-                # Добавляем сообщение о структурной ошибке в статус
                 self.statusBar().showMessage(f"{status} | {message}")
     
     def on_result_item_clicked(self, item):
-        """Обработчик клика по элементу таблицы"""
-        # Получаем токен из соответствующей строки
-        token_item = self.results_table.item(item.row(), 2)  # колонка с лексемой
+        token_item = self.results_table.item(item.row(), 2)
         if token_item:
             token = token_item.data(Qt.ItemDataRole.UserRole)
             if token:
                 self.jump_to_token(token)
     
     def jump_to_token(self, token):
-        """Переход к позиции токена в редакторе"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
         
-        # Находим позицию в тексте
         cursor = text_edit.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
         
-        # Переходим к нужной строке
         for _ in range(token.line - 1):
             cursor.movePosition(QTextCursor.MoveOperation.NextBlock)
         
-        # Переходим к начальной позиции (1-based to 0-based)
         cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
                             QTextCursor.MoveMode.MoveAnchor, 
                             token.start_pos - 1)
         
-        # Выделяем токен
         cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
                             QTextCursor.MoveMode.KeepAnchor, 
                             len(token.value))
@@ -974,16 +948,13 @@ class TextEditor(QMainWindow):
         text_edit.setTextCursor(cursor)
         text_edit.setFocus()
         
-        # Центрируем вид на курсоре
         text_edit.centerCursor()
     
     def new_file(self):
-        """Создание нового файла"""
         self.add_new_tab()
         self.statusBar().showMessage(self.get_text("Новый файл создан"))
     
     def open_file(self):
-        """Открытие файла"""
         file_path, _ = QFileDialog.getOpenFileName(
             self, self.get_text("Открыть файл"), "", 
             self.get_text("Текстовые файлы (*.txt);;Все файлы (*)")
@@ -999,7 +970,6 @@ class TextEditor(QMainWindow):
                                     self.get_text("Не удалось открыть файл: {}").format(str(e)))
     
     def save_current_file(self):
-        """Сохранение текущего файла"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return False
@@ -1023,11 +993,9 @@ class TextEditor(QMainWindow):
             return self.save_as_file()
     
     def save_file(self):
-        """Сохранение файла"""
         self.save_current_file()
     
     def save_as_file(self):
-        """Сохранение файла как"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return False
@@ -1052,7 +1020,6 @@ class TextEditor(QMainWindow):
         return False
     
     def closeEvent(self, event):
-        """Обработка закрытия окна"""
         for i in range(self.tab_widget.count()):
             if not self.maybe_save_tab(i):
                 event.ignore()
@@ -1060,7 +1027,6 @@ class TextEditor(QMainWindow):
         event.accept()
     
     def show_help(self):
-        """Показ справки"""
         help_text = self.get_text("РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ") + "\n\n"
         help_text += self.get_text("Функции программы:") + "\n\n"
         
@@ -1117,7 +1083,6 @@ class TextEditor(QMainWindow):
         QMessageBox.information(self, self.get_text("Справка"), help_text)
     
     def show_about(self):
-        """Показ информации о программе"""
         about_text = self.get_text("КОМПИЛЯТОР - Лексический анализатор") + "\n\n"
         about_text += self.get_text("Версия: 5.0") + "\n\n"
         about_text += self.get_text("Разработчик: Учебный проект") + "\n"
