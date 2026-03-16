@@ -108,15 +108,18 @@ Python и PyQt6
 1. Входная строка: const MAX_SIZE: u32 = 100;
 
 Выход:
-
+![alt text](image-2.png)
 
 СТРОКА С НЕДОПУСТИМЫМ СИМВОЛОМ
 1. Входная строка: const MARKS: i32 = 100@;
 
 Выход:
 
+![alt text](image-3.png)
+
 МНОГОСТРОЧНЫЙ ВВОД
 1. Входная строка: const MAX_SIZE: u32 = 100; /n const MARKS: i32 = 100;
 
 Выход: 
-
+![alt text](image-4.png)
+![alt text](image-5.png)
