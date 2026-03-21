@@ -7,6 +7,7 @@ from lexical_analyzer import LexicalAnalyzer, TokenType
 from parser import Parser, ParserError
 
 
+
 class LineNumberArea(QWidget):
     def __init__(self, editor):
         super().__init__(editor)

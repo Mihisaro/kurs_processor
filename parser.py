@@ -224,9 +224,7 @@ class Parser:
             description=f"Ожидается {expected}, но достигнут конец файла"
         ))
 
-    # =========================================
-    # УТИЛИТЫ
-    # =========================================
+ 
     def match_token(self, expected_type):
         if self.current_token and self.current_token.type == expected_type:
             token = self.current_token

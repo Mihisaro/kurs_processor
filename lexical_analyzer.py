@@ -1,4 +1,4 @@
-# lexical_analyzer.py - простой сканер для проверки недопустимых символов
+
 from enum import Enum
 
 class TokenType(Enum):
