@@ -4,6 +4,9 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from lexical_analyzer import LexicalAnalyzer, TokenType
+from parser import Parser, ParserError
+
+
 
 class LineNumberArea(QWidget):
     def __init__(self, editor):
@@ -129,30 +132,58 @@ class TextEditor(QMainWindow):
         
         self.add_new_tab()
         
-        self.results_table = QTableWidget()
-        self.results_table.setColumnCount(5)
-        self.results_table.setHorizontalHeaderLabels([
+        # Создаем вкладки для результатов
+        self.results_tab_widget = QTabWidget()
+        
+        # Вкладка для лексического анализатора
+        self.lexical_table = QTableWidget()
+        self.lexical_table.setColumnCount(5)
+        self.lexical_table.setHorizontalHeaderLabels([
             self.get_text("Код"), 
             self.get_text("Тип лексемы"), 
             self.get_text("Лексема"), 
             self.get_text("Строка"), 
             self.get_text("Позиция")
         ])
-        self.results_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.results_table.setAlternatingRowColors(True)
-        self.results_table.setSortingEnabled(True)
+        self.lexical_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.lexical_table.setAlternatingRowColors(True)
+        self.lexical_table.setSortingEnabled(True)
         
-        header = self.results_table.horizontalHeader()
+        header = self.lexical_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         
-        self.results_table.itemClicked.connect(self.on_result_item_clicked)
+        self.lexical_table.itemClicked.connect(self.on_lexical_item_clicked)
+        
+        # Вкладка для синтаксического анализатора
+        self.syntax_table = QTableWidget()
+        self.syntax_table.setColumnCount(4)
+        self.syntax_table.setHorizontalHeaderLabels([
+            self.get_text("Неверный фрагмент"),
+            self.get_text("Строка"),
+            self.get_text("Позиция"),
+            self.get_text("Описание ошибки")
+        ])
+        self.syntax_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.syntax_table.setAlternatingRowColors(True)
+        
+        syntax_header = self.syntax_table.horizontalHeader()
+        syntax_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        syntax_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        syntax_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        syntax_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        
+        self.syntax_table.itemClicked.connect(self.on_syntax_item_clicked)
+        
+        # Добавляем вкладки
+        self.results_tab_widget.addTab(self.lexical_table, self.get_text("Лексический анализ"))
+        self.results_tab_widget.addTab(self.syntax_table, self.get_text("Синтаксический анализ"))
         
         self.main_splitter.addWidget(self.tab_widget)
-        self.main_splitter.addWidget(self.results_table)
+        self.main_splitter.addWidget(self.results_tab_widget)
         
         self.main_splitter.setSizes([int(self.height() * 0.7), int(self.height() * 0.3)])
         self.main_splitter.setChildrenCollapsible(False)
@@ -264,6 +295,12 @@ class TextEditor(QMainWindow):
                 "Всего лексем: {} | Ошибок: {}": "Всего лексем: {} | Ошибок: {}",
                 
                 "Кликните на ошибку для перехода к позиции": "Кликните на ошибку для перехода к позиции",
+                
+                "Лексический анализ": "Лексический анализ",
+                "Синтаксический анализ": "Синтаксический анализ",
+                "Неверный фрагмент": "Неверный фрагмент",
+                "Описание ошибки": "Описание ошибки",
+                "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}",
             },
             "en": {
                 "Текстовый редактор кода": "Code Editor",
@@ -362,6 +399,12 @@ class TextEditor(QMainWindow):
                 "Всего лексем: {} | Ошибок: {}": "Total tokens: {} | Errors: {}",
                 
                 "Кликните на ошибку для перехода к позиции": "Click on error to navigate to position",
+                
+                "Лексический анализ": "Lexical Analysis",
+                "Синтаксический анализ": "Syntax Analysis",
+                "Неверный фрагмент": "Invalid Fragment",
+                "Описание ошибки": "Error Description",
+                "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Total tokens: {} | Lexical errors: {} | Syntax errors: {}",
             }
         }
         
@@ -848,20 +891,22 @@ class TextEditor(QMainWindow):
                 cursor.removeSelectedText()
     
     def run_analyzer(self):
+        """Запуск лексического и синтаксического анализа"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
         
         text = text_edit.toPlainText()
         
-        self.results_table.setRowCount(0)
-        self.results_table.setSortingEnabled(False)
+        # 1. Лексический анализ
+        self.lexical_table.setRowCount(0)
+        self.lexical_table.setSortingEnabled(False)
         
         tokens = self.analyzer.analyze(text)
         
-        self.results_table.setRowCount(len(tokens))
+        self.lexical_table.setRowCount(len(tokens))
         
-        error_count = 0
+        lexical_error_count = 0
         for row, token in enumerate(tokens):
             code_item = QTableWidgetItem(str(token.type.code))
             code_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -870,11 +915,11 @@ class TextEditor(QMainWindow):
             
             value = token.value
             if token.type == TokenType.SPACE:
-                value = value.replace(' ', '(пробел)')
+                value = '(пробел)'
             elif token.type == TokenType.TAB:
-                value = value.replace('\t', '→')
+                value = '→'
             elif token.type == TokenType.NEWLINE:
-                value = '/n'
+                value = '\\n'
             
             value_item = QTableWidgetItem(value)
             
@@ -886,47 +931,95 @@ class TextEditor(QMainWindow):
             
             value_item.setData(Qt.ItemDataRole.UserRole, token)
             
+            # Подсвечиваем только реальные ошибки (не пробелы)
             if token.is_error:
-                error_count += 1
+                lexical_error_count += 1
                 red_bg = QColor(255, 200, 200)
                 red_fg = QColor(255, 0, 0)
                 for item in [code_item, type_item, value_item, line_item, pos_item]:
                     item.setBackground(red_bg)
                     item.setForeground(red_fg)
-                    item.setToolTip(self.get_text("Кликните на ошибку для перехода к позиции"))
+                    item.setToolTip("Недопустимый символ")
             
-            self.results_table.setItem(row, 0, code_item)
-            self.results_table.setItem(row, 1, type_item)
-            self.results_table.setItem(row, 2, value_item)
-            self.results_table.setItem(row, 3, line_item)
-            self.results_table.setItem(row, 4, pos_item)
+            self.lexical_table.setItem(row, 0, code_item)
+            self.lexical_table.setItem(row, 1, type_item)
+            self.lexical_table.setItem(row, 2, value_item)
+            self.lexical_table.setItem(row, 3, line_item)
+            self.lexical_table.setItem(row, 4, pos_item)
         
-        self.results_table.setSortingEnabled(True)
+        self.lexical_table.setSortingEnabled(True)
+        self.lexical_table.sortItems(3, Qt.SortOrder.AscendingOrder)
         
-        self.results_table.sortItems(3, Qt.SortOrder.AscendingOrder)
+        # 2. Синтаксический анализ
+        parser = Parser()
+        syntax_tree, syntax_errors = parser.parse(tokens)
         
-        status = self.get_text("Всего лексем: {} | Ошибок: {}").format(len(tokens), error_count)
+        # Очищаем таблицу синтаксических ошибок
+        self.syntax_table.setRowCount(0)
+        
+        # Заполняем таблицу ошибок
+        for error in syntax_errors:
+            row = self.syntax_table.rowCount()
+            self.syntax_table.insertRow(row)
+            
+            fragment_item = QTableWidgetItem(error.fragment)
+            line_item = QTableWidgetItem(str(error.line))
+            line_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            pos_item = QTableWidgetItem(str(error.position))
+            pos_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            desc_item = QTableWidgetItem(error.description)
+            
+            # Подсвечиваем ошибки красным
+            red_bg = QColor(255, 200, 200)
+            fragment_item.setBackground(red_bg)
+            line_item.setBackground(red_bg)
+            pos_item.setBackground(red_bg)
+            desc_item.setBackground(red_bg)
+            
+            self.syntax_table.setItem(row, 0, fragment_item)
+            self.syntax_table.setItem(row, 1, line_item)
+            self.syntax_table.setItem(row, 2, pos_item)
+            self.syntax_table.setItem(row, 3, desc_item)
+        
+        # 3. Обновляем статусную строку
+        total_errors = lexical_error_count + len(syntax_errors)
+        status = self.get_text("Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}").format(
+            len(tokens), lexical_error_count, len(syntax_errors)
+        )
         self.statusBar().showMessage(status)
         
-        if error_count > 0:
-            QToolTip.showText(
-                self.results_table.mapToGlobal(QPoint(10, 10)),
-                self.get_text("Кликните на ошибку для перехода к позиции")
-            )
-        
-        if tokens:
-            is_valid, message = self.analyzer.validate_const_declaration(tokens)
-            if not is_valid:
-                self.statusBar().showMessage(f"{status} | {message}")
+        # Если есть синтаксические ошибки, переключаемся на вкладку синтаксического анализа
+        if syntax_errors:
+            self.results_tab_widget.setCurrentIndex(1)
+        else:
+            self.results_tab_widget.setCurrentIndex(0)
     
-    def on_result_item_clicked(self, item):
-        token_item = self.results_table.item(item.row(), 2)
+    def on_lexical_item_clicked(self, item):
+        """Обработка клика на лексической ошибке"""
+        token_item = self.lexical_table.item(item.row(), 2)
         if token_item:
             token = token_item.data(Qt.ItemDataRole.UserRole)
             if token:
                 self.jump_to_token(token)
     
+    def on_syntax_item_clicked(self, item):
+        """Обработка клика на ошибке синтаксического анализа"""
+        row = item.row()
+        
+        # Получаем данные об ошибке
+        fragment_item = self.syntax_table.item(row, 0)
+        line_item = self.syntax_table.item(row, 1)
+        pos_item = self.syntax_table.item(row, 2)
+        
+        if fragment_item and line_item and pos_item:
+            line = int(line_item.text())
+            pos = int(pos_item.text())
+            
+            # Переходим к позиции ошибки
+            self.jump_to_position(line, pos, fragment_item.text())
+    
     def jump_to_token(self, token):
+        """Переход к токену"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
@@ -947,7 +1040,34 @@ class TextEditor(QMainWindow):
         
         text_edit.setTextCursor(cursor)
         text_edit.setFocus()
+        text_edit.centerCursor()
+    
+    def jump_to_position(self, line, pos, fragment=None):
+        """Переход к указанной строке и позиции"""
+        text_edit = self.get_current_text_edit()
+        if not text_edit:
+            return
         
+        cursor = text_edit.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        
+        # Перемещаемся к нужной строке
+        for _ in range(line - 1):
+            cursor.movePosition(QTextCursor.MoveOperation.NextBlock)
+        
+        # Перемещаемся к нужной позиции в строке
+        cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
+                            QTextCursor.MoveMode.MoveAnchor, 
+                            pos - 1)
+        
+        # Выделяем фрагмент, если он есть и это не "конец файла"
+        if fragment and fragment != "конец файла" and fragment != "end of file":
+            cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
+                                QTextCursor.MoveMode.KeepAnchor, 
+                                len(fragment))
+        
+        text_edit.setTextCursor(cursor)
+        text_edit.setFocus()
         text_edit.centerCursor()
     
     def new_file(self):
@@ -1068,8 +1188,16 @@ class TextEditor(QMainWindow):
         help_text += self.get_text("    - Курсор автоматически переходит к позиции ошибки") + "\n"
         help_text += self.get_text("    - Токен выделяется в редакторе") + "\n\n"
         
+        help_text += self.get_text("🔧 Синтаксический анализатор:") + "\n"
+        help_text += self.get_text("  • Запускается вместе с лексическим анализатором") + "\n"
+        help_text += self.get_text("  • Проверяет правильность структуры объявления константы") + "\n"
+        help_text += self.get_text("  • Ожидаемая структура: const ИДЕНТИФИКАТОР : ТИП = ЧИСЛО ;") + "\n"
+        help_text += self.get_text("  • Использует метод Айронса для нейтрализации ошибок") + "\n"
+        help_text += self.get_text("  • Отображает все синтаксические ошибки в отдельной вкладке") + "\n"
+        help_text += self.get_text("  • Навигация по ошибкам: клик по ошибке в таблице") + "\n\n"
+        
         help_text += self.get_text("▶ Пуск:") + "\n"
-        help_text += self.get_text("  • Запустить лексический анализ (F5)") + "\n\n"
+        help_text += self.get_text("  • Запустить лексический и синтаксический анализ (F5)") + "\n\n"
         
         help_text += self.get_text("❓ Справка:") + "\n"
         help_text += self.get_text("  • Справка (F1) - вызов руководства пользователя") + "\n"
@@ -1083,17 +1211,16 @@ class TextEditor(QMainWindow):
         QMessageBox.information(self, self.get_text("Справка"), help_text)
     
     def show_about(self):
-        about_text = self.get_text("КОМПИЛЯТОР - Лексический анализатор") + "\n\n"
-        about_text += self.get_text("Версия: 5.0") + "\n\n"
+        about_text = self.get_text("КОМПИЛЯТОР - Лексический и синтаксический анализатор") + "\n\n"
+        about_text += self.get_text("Версия: 6.0") + "\n\n"
         about_text += self.get_text("Разработчик: Учебный проект") + "\n"
         about_text += self.get_text("Год: 2024") + "\n\n"
         about_text += self.get_text("Платформа: PyQt6") + "\n\n"
-        about_text += self.get_text("Новые возможности версии 5.0:") + "\n"
-        about_text += self.get_text("✓ Лексический анализатор для объявлений целочисленных констант Rust") + "\n"
-        about_text += self.get_text("✓ Распознавание всех типов лексем") + "\n"
-        about_text += self.get_text("✓ Таблица результатов с сортировкой") + "\n"
-        about_text += self.get_text("✓ Навигация по ошибкам (клик - переход к позиции)") + "\n"
-        about_text += self.get_text("✓ Подсветка ошибок красным цветом") + "\n\n"
+        about_text += self.get_text("Новые возможности версии 6.0:") + "\n"
+        about_text += self.get_text("✓ Синтаксический анализатор для объявлений целочисленных констант Rust") + "\n"
+        about_text += self.get_text("✓ Метод Айронса для нейтрализации синтаксических ошибок") + "\n"
+        about_text += self.get_text("✓ Отдельная вкладка для синтаксических ошибок") + "\n"
+        about_text += self.get_text("✓ Навигация по синтаксическим ошибкам") + "\n\n"
         
         about_text += self.get_text("Другие особенности:") + "\n"
         about_text += self.get_text("✓ Многодокументный интерфейс с вкладками") + "\n"
@@ -1103,3 +1230,10 @@ class TextEditor(QMainWindow):
         about_text += self.get_text("✓ Горячие клавиши для всех основных операций")
         
         QMessageBox.about(self, self.get_text("О программе"), about_text)
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    editor = TextEditor()
+    editor.show()
+    sys.exit(app.exec())
