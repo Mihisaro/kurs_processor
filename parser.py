@@ -181,9 +181,7 @@ class Parser:
 
             self.advance()
 
-    # =========================================
-    # ОШИБКИ
-    # =========================================
+
     def missing_token_error(self, expected):
         if self.current_token:
             self.errors.append(ParserError(
