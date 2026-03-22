@@ -362,3 +362,4 @@ class Parser:
             self.current_token = self.significant_tokens[self.position]
         else:
             self.current_token = None
+            

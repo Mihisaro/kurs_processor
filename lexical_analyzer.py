@@ -201,3 +201,4 @@ class LexicalAnalyzer:
             if token.is_error:
                 return False, f"Строка {token.line}: недопустимый символ '{token.value}' на позиции {token.start_pos}"
         return True, "OK"
+    
