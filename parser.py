@@ -51,14 +51,19 @@ class Parser:
 
         import re as _re
         self._float_before_pos = set()
+        self._float_end_pos = set()
         for idx, token in enumerate(tokens):
             if token.is_error:
                 if _re.match(r'^\d+\.\d*$', token.value):
                     msg = f"Дробное число '{token.value}' недопустимо: используйте целое число"
+                    found_next = False
                     for nxt in tokens[idx+1:]:
                         if nxt.type.name not in ('SPACE', 'TAB', 'NEWLINE') and not nxt.is_error:
                             self._float_before_pos.add(nxt.start_pos)
+                            found_next = True
                             break
+                    if not found_next:
+                        self._float_end_pos.add(token.end_pos)
                 else:
                     msg = f"Лексическая ошибка: недопустимый символ '{token.value}'"
                 self.errors.append(ParserError(
@@ -94,8 +99,11 @@ class Parser:
 
         if self._declaration_ahead():
             bad = self.current_token
-            self._add_error(bad, f"Ожидается ключевое слово 'const', найдено '{bad.value}'")
-            self._advance()
+            if bad.type == TokenType.IDENTIFIER and self._peek_is(1, TokenType.COLON):
+                self._add_error(bad, f"Пропущено ключевое слово 'const'")
+            else:
+                self._add_error(bad, f"Ожидается ключевое слово 'const', найдено '{bad.value}'")
+                self._advance()
             return self._parse_body(const_token=None)
 
         self._add_error(self.current_token, "Ожидается ключевое слово 'const'")
@@ -222,9 +230,11 @@ class Parser:
                 "value", number.value, number.line, number.start_pos))
         else:
             cur = self.current_token or self._last()
-            is_float_before = (hasattr(self, '_float_before_pos')
-                               and cur and cur.start_pos in self._float_before_pos)
-            if not is_float_before:
+            is_float = (hasattr(self, '_float_before_pos')
+                        and cur and cur.start_pos in self._float_before_pos)
+            is_float_at_end = (hasattr(self, '_float_end_pos')
+                               and bool(self._float_end_pos))
+            if not is_float and not is_float_at_end:
                 self._add_error(cur, "Ожидается числовой литерал")
             if not self._skip_to(TokenType.SEMICOLON):
                 self._synchronize()
@@ -362,4 +372,3 @@ class Parser:
             self.current_token = self.significant_tokens[self.position]
         else:
             self.current_token = None
-            
