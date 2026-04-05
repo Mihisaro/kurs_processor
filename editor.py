@@ -8,6 +8,15 @@ from lexical_analyzer import LexicalAnalyzer, TokenType
 from parser import Parser, ParserError
 from search_engine import SearchEngine, SearchType, SearchResult
 
+TEXTEDITOR_SEARCH_PRESETS = (
+    (r"^\d*[0-46-9]$", "search_preset_nums_no5"),
+    (r"^(220[0-4])\d{12,15}$", "search_preset_mir_card"),
+    (
+        r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[/#?!@_$%^&*\-|]).{12,}$",
+        "search_preset_password",
+    ),
+)
+
 
 class LineNumberArea(QWidget):
     def __init__(self, editor):
@@ -230,7 +239,44 @@ class TextEditor(QMainWindow):
         pv.setContentsMargins(10, 10, 10, 10)
         pv.setSpacing(8)
 
-        pv.addWidget(QLabel(self.get_text("Найти:"), popup_frame))
+        pv.addWidget(QLabel(self.get_text("Режим поиска:"), popup_frame))
+        self.search_mode_combo = QComboBox(popup_frame)
+        self.search_mode_combo.addItem(self.get_text("Свободный поиск"), "free")
+        self.search_mode_combo.addItem(self.get_text("Поиск по заданиям"), "presets")
+        self.search_mode_combo.setMinimumWidth(300)
+        self.search_mode_combo.currentIndexChanged.connect(self._on_search_mode_changed)
+        pv.addWidget(self.search_mode_combo)
+
+        self.search_preset_hint = QLabel(popup_frame)
+        self.search_preset_hint.setWordWrap(True)
+        self.search_preset_hint.setVisible(False)
+        self.search_preset_hint.setStyleSheet("color: #666;")
+        pv.addWidget(self.search_preset_hint)
+
+        self.search_preset_block = QWidget(popup_frame)
+        spb = QVBoxLayout(self.search_preset_block)
+        spb.setContentsMargins(0, 0, 0, 0)
+        spb.setSpacing(6)
+        spb.addWidget(QLabel(self.get_text("Задание (РВ):"), self.search_preset_block))
+        self.search_preset_combo = QComboBox(self.search_preset_block)
+        for pattern, title_key in TEXTEDITOR_SEARCH_PRESETS:
+            self.search_preset_combo.addItem(self.get_text(title_key), pattern)
+        self.search_preset_combo.setMinimumWidth(300)
+        self.search_preset_combo.currentIndexChanged.connect(
+            self._on_search_preset_changed)
+        spb.addWidget(self.search_preset_combo)
+        spb.addWidget(QLabel(self.get_text("Активное выражение:"), self.search_preset_block))
+        self.preset_regex_display = QLineEdit(self.search_preset_block)
+        self.preset_regex_display.setReadOnly(True)
+        pf = QFont("Courier New", self.font_size)
+        pf.setStyleHint(QFont.StyleHint.Monospace)
+        self.preset_regex_display.setFont(pf)
+        spb.addWidget(self.preset_regex_display)
+        self.search_preset_block.setVisible(False)
+        pv.addWidget(self.search_preset_block)
+
+        self.search_find_label = QLabel(self.get_text("Найти:"), popup_frame)
+        pv.addWidget(self.search_find_label)
         self.search_input = QLineEdit(popup_frame)
         self.search_input.setPlaceholderText(
             self.get_text("Введите текст или регулярное выражение..."))
@@ -238,7 +284,8 @@ class TextEditor(QMainWindow):
         self.search_input.returnPressed.connect(self.perform_search)
         pv.addWidget(self.search_input)
 
-        pv.addWidget(QLabel(self.get_text("Тип поиска:"), popup_frame))
+        self.search_type_label = QLabel(self.get_text("Тип поиска:"), popup_frame)
+        pv.addWidget(self.search_type_label)
         self.search_type_combo = QComboBox(popup_frame)
         for search_type in (SearchType.PLAIN, SearchType.REGEX, SearchType.WHOLE_WORD):
             self.search_type_combo.addItem(search_type.value, search_type)
@@ -290,26 +337,55 @@ class TextEditor(QMainWindow):
         st_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         st_header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
 
+        self._on_search_mode_changed()
+        self._on_search_preset_changed()
+
+    def _on_search_mode_changed(self, _index=None):
+        presets = self.search_mode_combo.currentData() == "presets"
+        self.search_preset_hint.setVisible(presets)
+        self.search_preset_block.setVisible(presets)
+        for w in (
+                self.search_find_label,
+                self.search_input,
+                self.search_type_label,
+                self.search_type_combo,
+                self.regex_flag_case,
+        ):
+            w.setVisible(not presets)
+        if presets:
+            self.search_preset_hint.setText(self.get_text("search_preset_doc_hint"))
+            self._on_search_preset_changed()
+
+    def _on_search_preset_changed(self, _index=None):
+        pat = self.search_preset_combo.currentData()
+        if pat:
+            self.preset_regex_display.setText(pat)
+
     def perform_search(self):
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
-        
-        pattern = self.search_input.text()
-        if not pattern:
+
+        text = text_edit.toPlainText()
+        if not text.strip():
             self.clear_search_results()
             return
-        
-        search_type = self.search_type_combo.currentData()
 
-        regex_flags = re.IGNORECASE if self.regex_flag_case.isChecked() else 0
-        
-        # Создаем поисковую систему
+        if self.search_mode_combo.currentData() == "presets":
+            pattern = self.search_preset_combo.currentData()
+            search_type = SearchType.REGEX
+            regex_flags = 0
+        else:
+            pattern = self.search_input.text()
+            if not pattern:
+                self.clear_search_results()
+                return
+            search_type = self.search_type_combo.currentData()
+            regex_flags = re.IGNORECASE if self.regex_flag_case.isChecked() else 0
+
         search_engine = SearchEngine()
-        
+
         try:
-            # Выполняем поиск
-            text = text_edit.toPlainText()
             results = search_engine.search(text, pattern, search_type, regex_flags)
             
             # Обновляем таблицу результатов
@@ -340,7 +416,6 @@ class TextEditor(QMainWindow):
             self.clear_search_results()
     
     def update_search_results_table(self, results: list):
-        """Обновление таблицы результатов поиска"""
         self.search_results_table.setRowCount(0)
 
         for row, result in enumerate(results):
@@ -367,7 +442,6 @@ class TextEditor(QMainWindow):
             self.search_results_table.setItem(row, 3, length_item)
     
     def clear_search_results(self):
-        """Очистка результатов поиска"""
         self.search_results_table.setRowCount(0)
         self.count_label.setText(self.get_text("Найдено: 0"))
         self.prev_btn.setEnabled(False)
@@ -421,7 +495,6 @@ class TextEditor(QMainWindow):
         text_edit.centerCursor()
     
     def on_search_result_clicked(self, item):
-        """Обработка клика на результате поиска"""
         text_item = self.search_results_table.item(item.row(), 0)
         if text_item:
             result = text_item.data(Qt.ItemDataRole.UserRole)
@@ -436,7 +509,6 @@ class TextEditor(QMainWindow):
                             break
     
     def go_to_prev_result(self):
-        """Переход к предыдущему результату"""
         if not hasattr(self, 'current_search_results') or not self.current_search_results:
             return
         
@@ -452,7 +524,6 @@ class TextEditor(QMainWindow):
         self.search_results_table.selectRow(self.current_result_index)
     
     def go_to_next_result(self):
-        """Переход к следующему результату"""
         if not hasattr(self, 'current_search_results') or not self.current_search_results:
             return
         
@@ -486,8 +557,11 @@ class TextEditor(QMainWindow):
         self.search_popup.move(x, y)
         self.search_popup.show()
         self.search_popup.raise_()
-        self.search_input.setFocus()
-        self.search_input.selectAll()
+        if self.search_mode_combo.currentData() == "presets":
+            self.search_preset_combo.setFocus()
+        else:
+            self.search_input.setFocus()
+            self.search_input.selectAll()
 
     def _toggle_search_popup(self):
         if self.search_popup.isVisible():
@@ -630,6 +704,17 @@ class TextEditor(QMainWindow):
                 "Найти в тексте (Enter)": "Найти в тексте (Enter)",
                 "Найдено совпадений: {}": "Найдено совпадений: {}",
                 "Открыть поиск": "Открыть поиск",
+                "Режим поиска:": "Режим поиска:",
+                "Свободный поиск": "Свободный поиск",
+                "Поиск по заданиям": "Готовые РВ",
+                "Задание (РВ):": "Задание (РВ):",
+                "Активное выражение:": "Активное выражение:",
+                "search_preset_doc_hint": "Примеры вводите в открытом документе (для шаблонов с ^ и $ удобно по одной строке на пример). Нажмите «Найти».",
+                "search_preset_nums_no5": "1) Числа, не оканчивающиеся на 5 (целая строка)",
+                "search_preset_mir_card": "2) Номера карт платёжной системы «Мир»",
+                "search_preset_password": "3) Надёжность пароля (A–Z, a–z, цифра, спецсимвол, ≥12)",
+                "  • Режим «Свободный поиск» — поле «Найти», тип, регистр": "  • Режим «Свободный поиск» — поле «Найти», тип, регистр",
+                "  • Режим «Поиск по заданиям» — три готовых РВ; примеры в документе": "  • Режим «Поиск по заданиям» — три готовых РВ; примеры в документе",
             },
             "en": {
                 "Текстовый редактор кода": "Code Editor",
@@ -757,6 +842,17 @@ class TextEditor(QMainWindow):
                 "Найти в тексте (Enter)": "Find in text (Enter)",
                 "Найдено совпадений: {}": "Matches found: {}",
                 "Открыть поиск": "Open search",
+                "Режим поиска:": "Search mode:",
+                "Свободный поиск": "Free search (custom pattern)",
+                "Поиск по заданиям": "Course presets (3 fixed regexes)",
+                "Задание (РВ):": "Preset (regex):",
+                "Активное выражение:": "Active pattern:",
+                "search_preset_doc_hint": "Type sample lines in the document (one line per test for ^…$ patterns). Click Find.",
+                "search_preset_nums_no5": "1) Numbers not ending in 5 (whole line)",
+                "search_preset_mir_card": "2) MIR payment card numbers",
+                "search_preset_password": "3) Strong password (A–Z, a–z, digit, special, ≥12)",
+                "  • Режим «Свободный поиск» — поле «Найти», тип, регистр": "  • Free mode — Find field, search type, case option",
+                "  • Режим «Поиск по заданиям» — три готовых РВ; примеры в документе": "  • Course presets — three fixed regexes; type samples in the document",
             }
         }
         
@@ -1275,7 +1371,6 @@ class TextEditor(QMainWindow):
                 cursor.removeSelectedText()
     
     def run_analyzer(self):
-        """Запуск лексического и синтаксического анализа"""
         # Очищаем предыдущие результаты поиска
         self.clear_search_results()
         
@@ -1389,7 +1484,6 @@ class TextEditor(QMainWindow):
             self.results_tab_widget.setCurrentIndex(0)
     
     def on_lexical_item_clicked(self, item):
-        """Обработка клика на лексической ошибке"""
         token_item = self.lexical_table.item(item.row(), 2)
         if token_item:
             token = token_item.data(Qt.ItemDataRole.UserRole)
@@ -1397,7 +1491,6 @@ class TextEditor(QMainWindow):
                 self.jump_to_token(token)
     
     def on_syntax_item_clicked(self, item):
-        """Обработка клика на ошибке синтаксического анализа"""
         row = item.row()
         
         desc_item = self.syntax_table.item(row, 3)
@@ -1421,7 +1514,6 @@ class TextEditor(QMainWindow):
             self.jump_to_position(line, pos, fragment_item.text())
     
     def jump_to_token(self, token):
-        """Переход к токену"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
@@ -1445,7 +1537,6 @@ class TextEditor(QMainWindow):
         text_edit.centerCursor()
     
     def jump_to_position(self, line, pos, fragment=None, cursor_only=False):
-        """Переход к указанной строке и позиции"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
@@ -1595,6 +1686,8 @@ class TextEditor(QMainWindow):
         help_text += self.get_text("  • Сбросить размер окна") + "\n\n"
         
         help_text += self.get_text("🔍 Поиск:") + "\n"
+        help_text += self.get_text("  • Режим «Свободный поиск» — поле «Найти», тип, регистр") + "\n"
+        help_text += self.get_text("  • Режим «Поиск по заданиям» — три готовых РВ; примеры в документе") + "\n"
         help_text += self.get_text("  • Обычный поиск - поиск точного совпадения") + "\n"
         help_text += self.get_text("  • Регулярное выражение - поиск по шаблону regex") + "\n"
         help_text += self.get_text("  • Целое слово - поиск только целых слов") + "\n"

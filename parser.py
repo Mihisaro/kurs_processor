@@ -173,16 +173,37 @@ class Parser:
                 self._advance()
             return self._parse_body(const_token=None)
 
-        bad = self.current_token
-        self._add_error(bad, f"Неожиданный токен '{bad.value}'")
-        self._synchronize()
+        self._report_unexpected_sequence_and_sync()
         return None
+
+    def _skip_stray_semicolons_before_identifier(self):
+        if not self._cur_is(TokenType.SEMICOLON):
+            return
+        start = self.current_token
+        n = 0
+        while self._cur_is(TokenType.SEMICOLON):
+            self._advance()
+            n += 1
+        frag = ";" * n
+        if n > 1:
+            self._add_error(
+                start,
+                f"Лишние точки с запятой ({n} шт.) перед именем константы",
+                fragment=frag,
+            )
+        else:
+            self._add_error(
+                start,
+                "Лишняя точка с запятой перед именем константы",
+            )
 
     def _parse_body(self, const_token):
         root = SyntaxTreeNode("const_declaration")
         if const_token:
             root.add_child(SyntaxTreeNode(
                 "keyword", const_token.value, const_token.line, const_token.start_pos))
+
+        self._skip_stray_semicolons_before_identifier()
 
         while (self.current_token
                and self.current_token.type != TokenType.IDENTIFIER
@@ -279,8 +300,15 @@ class Parser:
         )
 
         if not self._match_repeated(TokenType.ASSIGN, "="):
-            self._add_error(
-                self.current_token or self._last(), "Пропущен '='", cursor_only=True)
+            if self._cur_is(TokenType.SEMICOLON) and self._peek_is(1, TokenType.ASSIGN):
+                self._add_error(
+                    self.current_token,
+                    "Лишняя точка с запятой перед '='",
+                )
+                self._advance()
+            if not self._match_repeated(TokenType.ASSIGN, "="):
+                self._add_error(
+                    self.current_token or self._last(), "Пропущен '='", cursor_only=True)
 
         self._skip_junk(
             want=TokenType.NUMBER,
@@ -289,6 +317,13 @@ class Parser:
         )
 
         number = self._match(TokenType.NUMBER)
+        if not number and self._cur_is(TokenType.SEMICOLON) and self._peek_is(1, TokenType.NUMBER):
+            self._add_error(
+                self.current_token,
+                "Лишняя точка с запятой перед числовым литералом",
+            )
+            self._advance()
+            number = self._match(TokenType.NUMBER)
         if number:
             root.add_child(SyntaxTreeNode(
                 "value", number.value, number.line, number.start_pos))
@@ -383,6 +418,33 @@ class Parser:
                 break
         return has_colon or (has_type and has_assign) or (ident_count >= 2 and has_assign)
 
+    def _report_unexpected_sequence_and_sync(self):
+        start_idx = self.position
+        i = start_idx
+        parts = []
+        while i < len(self.significant_tokens):
+            t = self.significant_tokens[i]
+            if t.type == TokenType.SEMICOLON or t.type == TokenType.CONST:
+                break
+            parts.append(t.value)
+            i += 1
+        if not parts:
+            return
+        first = self.significant_tokens[start_idx]
+        combined = ''.join(parts)
+        if len(parts) == 1:
+            self._add_error(first, f"Неожиданный токен '{combined}'")
+        else:
+            self._add_error(
+                first,
+                f"Неожиданная последовательность символов '{combined}'",
+                fragment=combined,
+            )
+        self.position = i
+        self._update()
+        if self.current_token and self.current_token.type == TokenType.SEMICOLON:
+            self._advance()
+
     def _synchronize(self):
         while self.current_token:
             if self.current_token.type == TokenType.SEMICOLON:
@@ -432,7 +494,7 @@ class Parser:
         return self.significant_tokens[-1] if self.significant_tokens else None
 
     def _add_error(self, token, description, *, cursor_only=False,
-                   insert_after=False, const_insert=False):
+                   insert_after=False, const_insert=False, fragment=None):
         if token:
             line = token.line
             if cursor_only:
@@ -444,8 +506,9 @@ class Parser:
                     col = token.start_pos
             else:
                 col = token.start_pos
+            frag = fragment if fragment is not None else token.value
             self.errors.append(ParserError(
-                token.value, line, col, description, cursor_only=cursor_only))
+                frag, line, col, description, cursor_only=cursor_only))
         else:
             self.errors.append(ParserError(
                 "EOF", 0, 0, description, cursor_only=cursor_only))
