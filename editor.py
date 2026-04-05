@@ -1,11 +1,12 @@
 import sys
 import os
+import re
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from lexical_analyzer import LexicalAnalyzer, TokenType
 from parser import Parser, ParserError
-
+from search_engine import SearchEngine, SearchType, SearchResult
 
 
 class LineNumberArea(QWidget):
@@ -99,6 +100,8 @@ class TextEditor(QMainWindow):
         self.font_size = 12
         self.current_language = self.load_language()
         self.analyzer = LexicalAnalyzer()
+        self.current_search_results = []
+        self.current_result_index = -1
         self.initUI()
         
     def load_language(self):
@@ -120,7 +123,9 @@ class TextEditor(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
+
+        self._init_search_ui()
+
         self.create_toolbar()
         
         self.main_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -177,10 +182,21 @@ class TextEditor(QMainWindow):
         syntax_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         
         self.syntax_table.itemClicked.connect(self.on_syntax_item_clicked)
-        
-        # Добавляем вкладки
+
         self.results_tab_widget.addTab(self.lexical_table, self.get_text("Лексический анализ"))
         self.results_tab_widget.addTab(self.syntax_table, self.get_text("Синтаксический анализ"))
+
+        self.search_tab_host = QWidget()
+        search_tab_layout = QVBoxLayout(self.search_tab_host)
+        search_tab_layout.setContentsMargins(4, 4, 4, 4)
+        search_nav = QHBoxLayout()
+        search_nav.addWidget(self.prev_btn)
+        search_nav.addWidget(self.next_btn)
+        search_nav.addWidget(self.count_label)
+        search_nav.addStretch()
+        search_tab_layout.addLayout(search_nav)
+        search_tab_layout.addWidget(self.search_results_table)
+        self.results_tab_widget.addTab(self.search_tab_host, self.get_text("Поиск"))
         
         self.main_splitter.addWidget(self.tab_widget)
         self.main_splitter.addWidget(self.results_tab_widget)
@@ -190,11 +206,301 @@ class TextEditor(QMainWindow):
         self.main_splitter.setHandleWidth(5)
         
         main_layout.addWidget(self.main_splitter)
-        
+
         self.create_menu()
         
         self.statusBar().showMessage(self.get_text("Готов"))
+    
+    def _init_search_ui(self):
+        self.search_popup = QDialog(self)
+        self.search_popup.setWindowFlags(
+            Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.search_popup.setModal(False)
+
+        popup_frame = QFrame(self.search_popup)
+        popup_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        popup_frame.setStyleSheet(
+            "QFrame { background: palette(base); border: 1px solid #c0c0c0; border-radius: 4px; }"
+        )
+        popup_outer = QVBoxLayout(self.search_popup)
+        popup_outer.setContentsMargins(0, 0, 0, 0)
+        popup_outer.addWidget(popup_frame)
+
+        pv = QVBoxLayout(popup_frame)
+        pv.setContentsMargins(10, 10, 10, 10)
+        pv.setSpacing(8)
+
+        pv.addWidget(QLabel(self.get_text("Найти:"), popup_frame))
+        self.search_input = QLineEdit(popup_frame)
+        self.search_input.setPlaceholderText(
+            self.get_text("Введите текст или регулярное выражение..."))
+        self.search_input.setMinimumWidth(300)
+        self.search_input.returnPressed.connect(self.perform_search)
+        pv.addWidget(self.search_input)
+
+        pv.addWidget(QLabel(self.get_text("Тип поиска:"), popup_frame))
+        self.search_type_combo = QComboBox(popup_frame)
+        for search_type in (SearchType.PLAIN, SearchType.REGEX, SearchType.WHOLE_WORD):
+            self.search_type_combo.addItem(search_type.value, search_type)
+        self.search_type_combo.setMinimumWidth(280)
+        pv.addWidget(self.search_type_combo)
+
+        self.regex_flag_case = QCheckBox(
+            self.get_text("Игнорировать регистр"), popup_frame)
+        self.regex_flag_case.setChecked(True)
+        pv.addWidget(self.regex_flag_case)
+
+        find_row = QHBoxLayout()
+        find_row.addStretch()
+        popup_find_btn = QPushButton(self.get_text("Найти"), popup_frame)
+        popup_find_btn.setToolTip(self.get_text("Найти в тексте (Enter)"))
+        popup_find_btn.clicked.connect(self.perform_search)
+        find_row.addWidget(popup_find_btn)
+        pv.addLayout(find_row)
+
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self.search_popup).activated.connect(
+            self.search_popup.hide)
+
+        self.prev_btn = QPushButton(self.get_text("← Предыдущий"), self)
+        self.prev_btn.clicked.connect(self.go_to_prev_result)
+        self.prev_btn.setEnabled(False)
+
+        self.next_btn = QPushButton(self.get_text("Следующий →"), self)
+        self.next_btn.clicked.connect(self.go_to_next_result)
+        self.next_btn.setEnabled(False)
+
+        self.count_label = QLabel(self.get_text("Найдено: 0"), self)
+
+        self.search_results_table = QTableWidget(self)
+        self.search_results_table.setColumnCount(4)
+        self.search_results_table.setHorizontalHeaderLabels([
+            self.get_text("Найденная подстрока"),
+            self.get_text("Строка"),
+            self.get_text("Позиция"),
+            self.get_text("Длина"),
+        ])
+        self.search_results_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.search_results_table.setAlternatingRowColors(True)
+        self.search_results_table.setSortingEnabled(False)
+        self.search_results_table.itemClicked.connect(self.on_search_result_clicked)
+
+        st_header = self.search_results_table.horizontalHeader()
+        st_header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        st_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        st_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        st_header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+
+    def perform_search(self):
+        text_edit = self.get_current_text_edit()
+        if not text_edit:
+            return
         
+        pattern = self.search_input.text()
+        if not pattern:
+            self.clear_search_results()
+            return
+        
+        search_type = self.search_type_combo.currentData()
+
+        regex_flags = re.IGNORECASE if self.regex_flag_case.isChecked() else 0
+        
+        # Создаем поисковую систему
+        search_engine = SearchEngine()
+        
+        try:
+            # Выполняем поиск
+            text = text_edit.toPlainText()
+            results = search_engine.search(text, pattern, search_type, regex_flags)
+            
+            # Обновляем таблицу результатов
+            self.update_search_results_table(results)
+            
+            # Обновляем счетчик
+            count = len(results)
+            self.count_label.setText(self.get_text("Найдено: {}").format(count))
+            self.statusBar().showMessage(self.get_text("Найдено совпадений: {}").format(count))
+            
+            # Обновляем состояние кнопок навигации
+            self.prev_btn.setEnabled(count > 0)
+            self.next_btn.setEnabled(count > 0)
+            
+            # Сохраняем результаты для навигации
+            self.current_search_results = results
+            self.current_result_index = 0 if results else -1
+            
+            if results:
+                self.highlight_search_result(results[0])
+
+            idx = self.results_tab_widget.indexOf(self.search_tab_host)
+            if idx >= 0:
+                self.results_tab_widget.setCurrentIndex(idx)
+
+        except ValueError as e:
+            QMessageBox.warning(self, self.get_text("Ошибка поиска"), str(e))
+            self.clear_search_results()
+    
+    def update_search_results_table(self, results: list):
+        """Обновление таблицы результатов поиска"""
+        self.search_results_table.setRowCount(0)
+
+        for row, result in enumerate(results):
+            self.search_results_table.insertRow(row)
+            
+            # Найденная подстрока
+            text_item = QTableWidgetItem(result.text)
+            text_item.setData(Qt.ItemDataRole.UserRole, result)
+            self.search_results_table.setItem(row, 0, text_item)
+            
+            # Строка
+            line_item = QTableWidgetItem(str(result.line))
+            line_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.search_results_table.setItem(row, 1, line_item)
+            
+            # Позиция
+            pos_item = QTableWidgetItem(str(result.start_pos))
+            pos_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.search_results_table.setItem(row, 2, pos_item)
+            
+            # Длина
+            length_item = QTableWidgetItem(str(result.length))
+            length_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.search_results_table.setItem(row, 3, length_item)
+    
+    def clear_search_results(self):
+        """Очистка результатов поиска"""
+        self.search_results_table.setRowCount(0)
+        self.count_label.setText(self.get_text("Найдено: 0"))
+        self.prev_btn.setEnabled(False)
+        self.next_btn.setEnabled(False)
+        self.current_search_results = []
+        self.current_result_index = -1
+        
+        # Снимаем подсветку в редакторе
+        self.clear_highlighting()
+    
+    def clear_highlighting(self):
+        text_edit = self.get_current_text_edit()
+        if text_edit:
+            text_edit.setExtraSelections([])
+            cursor = text_edit.textCursor()
+            cursor.clearSelection()
+            text_edit.setTextCursor(cursor)
+
+    def highlight_search_result(self, result):
+        text_edit = self.get_current_text_edit()
+        if not text_edit:
+            return
+
+        cursor = QTextCursor(text_edit.document())
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        for _ in range(result.line - 1):
+            if not cursor.movePosition(QTextCursor.MoveOperation.NextBlock):
+                return
+
+        line_text = cursor.block().text()
+        col0 = max(0, min(result.start_pos - 1, len(line_text)))
+        cursor.setPosition(cursor.block().position() + col0)
+        n = min(result.length, max(0, len(line_text) - col0))
+        if n <= 0:
+            return
+        cursor.movePosition(
+            QTextCursor.MoveOperation.NextCharacter,
+            QTextCursor.MoveMode.KeepAnchor,
+            n,
+        )
+
+        extra = QTextEdit.ExtraSelection()
+        extra.cursor = cursor
+        fmt = QTextCharFormat()
+        fmt.setBackground(QColor(255, 235, 120))
+        fmt.setForeground(QColor(30, 30, 30))
+        extra.format = fmt
+        text_edit.setExtraSelections([extra])
+        text_edit.setTextCursor(cursor)
+        text_edit.setFocus()
+        text_edit.centerCursor()
+    
+    def on_search_result_clicked(self, item):
+        """Обработка клика на результате поиска"""
+        text_item = self.search_results_table.item(item.row(), 0)
+        if text_item:
+            result = text_item.data(Qt.ItemDataRole.UserRole)
+            if result:
+                self.highlight_search_result(result)
+                # Обновляем текущий индекс для навигации
+                if hasattr(self, 'current_search_results'):
+                    for i, r in enumerate(self.current_search_results):
+                        if (r.line == result.line and r.start_pos == result.start_pos
+                                and r.length == result.length):
+                            self.current_result_index = i
+                            break
+    
+    def go_to_prev_result(self):
+        """Переход к предыдущему результату"""
+        if not hasattr(self, 'current_search_results') or not self.current_search_results:
+            return
+        
+        if self.current_result_index <= 0:
+            self.current_result_index = len(self.current_search_results) - 1
+        else:
+            self.current_result_index -= 1
+        
+        result = self.current_search_results[self.current_result_index]
+        self.highlight_search_result(result)
+        
+        # Подсвечиваем соответствующую строку в таблице
+        self.search_results_table.selectRow(self.current_result_index)
+    
+    def go_to_next_result(self):
+        """Переход к следующему результату"""
+        if not hasattr(self, 'current_search_results') or not self.current_search_results:
+            return
+        
+        if self.current_result_index >= len(self.current_search_results) - 1:
+            self.current_result_index = 0
+        else:
+            self.current_result_index += 1
+        
+        result = self.current_search_results[self.current_result_index]
+        self.highlight_search_result(result)
+        
+        # Подсвечиваем соответствующую строку в таблице
+        self.search_results_table.selectRow(self.current_result_index)
+    
+    def _open_search_popup(self):
+        if not hasattr(self, "search_popup_btn"):
+            return
+        self.search_popup.adjustSize()
+        btn = self.search_popup_btn
+        g = btn.mapToGlobal(QPoint(0, btn.height() + 2))
+        w, h = self.search_popup.width(), self.search_popup.height()
+        screen = QGuiApplication.screenAt(g)
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+        ag = screen.availableGeometry()
+        x = min(max(ag.left() + 4, g.x()), ag.right() - w - 4)
+        y = g.y()
+        if y + h > ag.bottom():
+            y = btn.mapToGlobal(QPoint(0, 0)).y() - h - 2
+        y = min(max(ag.top() + 4, y), ag.bottom() - h - 4)
+        self.search_popup.move(x, y)
+        self.search_popup.show()
+        self.search_popup.raise_()
+        self.search_input.setFocus()
+        self.search_input.selectAll()
+
+    def _toggle_search_popup(self):
+        if self.search_popup.isVisible():
+            self.search_popup.hide()
+        else:
+            self._open_search_popup()
+
+    def show_search_panel(self):
+        idx = self.results_tab_widget.indexOf(self.search_tab_host)
+        if idx >= 0:
+            self.results_tab_widget.setCurrentIndex(idx)
+        self._open_search_popup()
+    
     def get_text(self, key):
         translations = {
             "ru": {
@@ -226,6 +532,10 @@ class TextEditor(QMainWindow):
                 "Вставить": "Вставить",
                 "Удалить": "Удалить",
                 "Выделить всё": "Выделить всё",
+                "Найти (Ctrl+F)": "Найти (Ctrl+F)",
+                "  • Найти (Ctrl+F) - вкладка «Поиск» и всплывающее окно поиска": "  • Найти (Ctrl+F) - вкладка «Поиск» и всплывающее окно поиска",
+                "Найти далее (F3)": "Найти далее (F3)",
+                "Найти ранее (Shift+F3)": "Найти ранее (Shift+F3)",
                 
                 "Размер текста": "Размер текста",
                 "Увеличить (Ctrl++)": "Увеличить (Ctrl++)",
@@ -301,6 +611,25 @@ class TextEditor(QMainWindow):
                 "Неверный фрагмент": "Неверный фрагмент",
                 "Описание ошибки": "Описание ошибки",
                 "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}",
+                
+                "Поиск": "Поиск",
+                "Найти:": "Найти:",
+                "Введите текст или регулярное выражение...": "Введите текст или регулярное выражение...",
+                "Тип поиска:": "Тип поиска:",
+                "Обычный поиск": "Обычный поиск",
+                "Регулярное выражение": "Регулярное выражение",
+                "Целое слово": "Целое слово",
+                "Игнорировать регистр": "Игнорировать регистр",
+                "← Предыдущий": "← Предыдущий",
+                "Следующий →": "Следующий →",
+                "Найдено: {}": "Найдено: {}",
+                "Найденная подстрока": "Найденная подстрока",
+                "Длина": "Длина",
+                "Ошибка поиска": "Ошибка поиска",
+                "Найти": "Найти",
+                "Найти в тексте (Enter)": "Найти в тексте (Enter)",
+                "Найдено совпадений: {}": "Найдено совпадений: {}",
+                "Открыть поиск": "Открыть поиск",
             },
             "en": {
                 "Текстовый редактор кода": "Code Editor",
@@ -331,6 +660,10 @@ class TextEditor(QMainWindow):
                 "Вставить": "Paste",
                 "Удалить": "Delete",
                 "Выделить всё": "Select All",
+                "Найти (Ctrl+F)": "Find (Ctrl+F)",
+                "  • Найти (Ctrl+F) - вкладка «Поиск» и всплывающее окно поиска": "  • Find (Ctrl+F) - Search tab and search popup",
+                "Найти далее (F3)": "Find Next (F3)",
+                "Найти ранее (Shift+F3)": "Find Previous (Shift+F3)",
                 
                 "Размер текста": "Text Size",
                 "Увеличить (Ctrl++)": "Increase (Ctrl++)",
@@ -405,6 +738,25 @@ class TextEditor(QMainWindow):
                 "Неверный фрагмент": "Invalid Fragment",
                 "Описание ошибки": "Error Description",
                 "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Total tokens: {} | Lexical errors: {} | Syntax errors: {}",
+                
+                "Поиск": "Search",
+                "Найти:": "Find:",
+                "Введите текст или регулярное выражение...": "Enter text or regular expression...",
+                "Тип поиска:": "Search type:",
+                "Обычный поиск": "Plain search",
+                "Регулярное выражение": "Regular expression",
+                "Целое слово": "Whole word",
+                "Игнорировать регистр": "Ignore case",
+                "← Предыдущий": "← Previous",
+                "Следующий →": "Next →",
+                "Найдено: {}": "Found: {}",
+                "Найденная подстрока": "Found substring",
+                "Длина": "Length",
+                "Ошибка поиска": "Search error",
+                "Найти": "Find",
+                "Найти в тексте (Enter)": "Find in text (Enter)",
+                "Найдено совпадений: {}": "Matches found: {}",
+                "Открыть поиск": "Open search",
             }
         }
         
@@ -473,6 +825,9 @@ class TextEditor(QMainWindow):
                 self.statusBar().showMessage(self.get_text("Текущий файл: {}").format(file_path))
             else:
                 self.statusBar().showMessage(self.get_text("Новый документ"))
+            
+            # Очищаем результаты поиска при смене вкладки
+            self.clear_search_results()
     
     def update_tab_title(self, text_edit):
         index = self.tab_widget.indexOf(text_edit)
@@ -593,6 +948,24 @@ class TextEditor(QMainWindow):
         select_all_action.setShortcut("Ctrl+A")
         select_all_action.triggered.connect(lambda: self.get_current_text_edit().selectAll() if self.get_current_text_edit() else None)
         edit_menu.addAction(select_all_action)
+        
+        edit_menu.addSeparator()
+        
+        # Поиск
+        find_action = QAction(self.get_text("Найти (Ctrl+F)"), self)
+        find_action.setShortcut("Ctrl+F")
+        find_action.triggered.connect(self.show_search_panel)
+        edit_menu.addAction(find_action)
+        
+        find_next_action = QAction(self.get_text("Найти далее (F3)"), self)
+        find_next_action.setShortcut("F3")
+        find_next_action.triggered.connect(self.go_to_next_result)
+        edit_menu.addAction(find_next_action)
+        
+        find_prev_action = QAction(self.get_text("Найти ранее (Shift+F3)"), self)
+        find_prev_action.setShortcut("Shift+F3")
+        find_prev_action.triggered.connect(self.go_to_prev_result)
+        edit_menu.addAction(find_prev_action)
         
         view_menu = menubar.addMenu(self.get_text("Вид"))
         
@@ -801,7 +1174,18 @@ class TextEditor(QMainWindow):
         toolbar.addWidget(font_widget)
         
         toolbar.addSeparator()
-        
+
+        self.search_popup_btn = QToolButton(self)
+        self.search_popup_btn.setText("🔍 " + self.get_text("Поиск"))
+        self.search_popup_btn.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.search_popup_btn.setToolTip(self.get_text("Открыть поиск"))
+        self.search_popup_btn.setAutoRaise(True)
+        self.search_popup_btn.clicked.connect(self._toggle_search_popup)
+        toolbar.addWidget(self.search_popup_btn)
+
+        toolbar.addSeparator()
+
         run_btn = QAction(self.create_colored_icon("▶", "#107C10", "#E6FFE6"), self.get_text("Пуск"), self)
         run_btn.setToolTip(self.get_text("Запустить лексический анализ (F5)"))
         run_btn.triggered.connect(self.run_analyzer)
@@ -892,6 +1276,9 @@ class TextEditor(QMainWindow):
     
     def run_analyzer(self):
         """Запуск лексического и синтаксического анализа"""
+        # Очищаем предыдущие результаты поиска
+        self.clear_search_results()
+        
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
@@ -1058,9 +1445,7 @@ class TextEditor(QMainWindow):
         text_edit.centerCursor()
     
     def jump_to_position(self, line, pos, fragment=None, cursor_only=False):
-        """Переход к указанной строке и позиции.
-        Если cursor_only=True или fragment не задан — только каретка (вставка знака/слова).
-        """
+        """Переход к указанной строке и позиции"""
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
@@ -1193,7 +1578,10 @@ class TextEditor(QMainWindow):
         help_text += self.get_text("  • Копировать (Ctrl+C) - копировать выделенный текст") + "\n"
         help_text += self.get_text("  • Вставить (Ctrl+V) - вставить текст из буфера") + "\n"
         help_text += self.get_text("  • Удалить (Del) - удалить выделенный текст") + "\n"
-        help_text += self.get_text("  • Выделить всё (Ctrl+A) - выделить весь текст") + "\n\n"
+        help_text += self.get_text("  • Выделить всё (Ctrl+A) - выделить весь текст") + "\n"
+        help_text += self.get_text("  • Найти (Ctrl+F) - вкладка «Поиск» и всплывающее окно поиска") + "\n"
+        help_text += self.get_text("  • Найти далее (F3) - перейти к следующему результату") + "\n"
+        help_text += self.get_text("  • Найти ранее (Shift+F3) - перейти к предыдущему результату") + "\n\n"
         
         help_text += self.get_text("👁️ Вид:") + "\n"
         help_text += self.get_text("  • Размер текста:") + "\n"
@@ -1205,6 +1593,15 @@ class TextEditor(QMainWindow):
         help_text += self.get_text("    - Русский / English") + "\n"
         help_text += self.get_text("  • Пропорции областей: 70/30, 60/40, 50/50") + "\n"
         help_text += self.get_text("  • Сбросить размер окна") + "\n\n"
+        
+        help_text += self.get_text("🔍 Поиск:") + "\n"
+        help_text += self.get_text("  • Обычный поиск - поиск точного совпадения") + "\n"
+        help_text += self.get_text("  • Регулярное выражение - поиск по шаблону regex") + "\n"
+        help_text += self.get_text("  • Целое слово - поиск только целых слов") + "\n"
+        help_text += self.get_text("  • Игнорировать регистр - поиск без учета регистра") + "\n"
+        help_text += self.get_text("  • Результаты — во вкладке «Поиск» (таблица: фрагмент, строка, позиция, длина)") + "\n"
+        help_text += self.get_text("  • Клик по результату - переход к найденному фрагменту") + "\n"
+        help_text += self.get_text("  • Кнопки навигации для перемещения между результатами") + "\n\n"
         
         help_text += self.get_text("📊 Лексический анализатор:") + "\n"
         help_text += self.get_text("  • Запуск (F5) - выполнить лексический анализ") + "\n"
@@ -1248,7 +1645,8 @@ class TextEditor(QMainWindow):
         about_text += self.get_text("✓ Синтаксический анализатор для объявлений целочисленных констант Rust") + "\n"
         about_text += self.get_text("✓ Метод Айронса для нейтрализации синтаксических ошибок") + "\n"
         about_text += self.get_text("✓ Отдельная вкладка для синтаксических ошибок") + "\n"
-        about_text += self.get_text("✓ Навигация по синтаксическим ошибкам") + "\n\n"
+        about_text += self.get_text("✓ Навигация по синтаксическим ошибкам") + "\n"
+        about_text += self.get_text("✓ Модуль поиска с поддержкой регулярных выражений") + "\n\n"
         
         about_text += self.get_text("Другие особенности:") + "\n"
         about_text += self.get_text("✓ Многодокументный интерфейс с вкладками") + "\n"

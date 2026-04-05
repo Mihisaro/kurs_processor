@@ -98,17 +98,12 @@ class Parser:
         return root, self.errors
 
     def _looks_like_const_keyword_typo(self, token):
-        """Идентификатор вроде 'cons' вместо ключевого слова const."""
         if not token or token.type != TokenType.IDENTIFIER:
             return False
         v = token.value.lower()
         return v.startswith("con") and len(v) <= 5
 
     def _ident_then_type_before_sync(self):
-        """
-        Схема «имя тип значение» без ':' и '=' (например MARKS i32 100;).
-        До ближайшего ';' или const есть TYPE после первого идентификатора.
-        """
         if not self.current_token or self.current_token.type != TokenType.IDENTIFIER:
             return False
         for i in range(self.position + 1, len(self.significant_tokens)):
@@ -122,10 +117,6 @@ class Parser:
         return False
 
     def _should_parse_declaration_body(self):
-        """
-        True только если дальше похоже на тело const IDENT : TYPE = NUM ;
-        (без этого полный _parse_body даёт каскад ложных ошибок на мусор после ';').
-        """
         t = self.current_token
         if not t:
             return False
@@ -144,11 +135,6 @@ class Parser:
         return False
 
     def _parse_one_declaration(self):
-        """
-        Разбираем одно объявление вида: const IDENT : TYPE = NUMBER ;
-        Полный разбор тела только если токены действительно похожи на объявление;
-        иначе одна ошибка и синхронизация (без каскада «пропущен :, =, …»).
-        """
         if not self.current_token:
             return None
 
@@ -159,7 +145,6 @@ class Parser:
         if self.current_token.type == TokenType.CONST:
             return self._parse_body(const_token=self._consume())
 
-        # cons, cont, … — лексер даёт IDENTIFIER, а не CONST
         if self._looks_like_const_keyword_typo(self.current_token):
             bad = self.current_token
             self._add_error(
@@ -172,7 +157,6 @@ class Parser:
             bad = self.current_token
             looks_like_const_typo = (bad.type == TokenType.IDENTIFIER
                                      and bad.value.lower().startswith('con'))
-            # i32: i32 = … или i32 i32 = … — «пропущен const», первое слово — имя (лексема TYPE)
             if bad.type == TokenType.TYPE and (
                     self._peek_is(1, TokenType.COLON)
                     or (self._peek_is(1, TokenType.TYPE)
@@ -199,17 +183,11 @@ class Parser:
         return None
 
     def _parse_body(self, const_token):
-        """
-        Разбираем тело: [IDENT] [:] [TYPE] [=] [NUMBER] [;]
-        Каждый отсутствующий обязательный элемент — отдельная ошибка.
-        Не прерываемся в середине — проходим всё объявление до конца.
-        """
         root = SyntaxTreeNode("const_declaration")
         if const_token:
             root.add_child(SyntaxTreeNode(
                 "keyword", const_token.value, const_token.line, const_token.start_pos))
 
-        # ── 1. Идентификатор ─────────────────────────────────────────────────
         while (self.current_token
                and self.current_token.type != TokenType.IDENTIFIER
                and self.current_token.type not in SYNC_TOKENS
@@ -233,7 +211,6 @@ class Parser:
         skipped_duplicate_const = False
         while not ident and self._cur_is(TokenType.CONST):
             bad = self.current_token
-            # Без cursor_only — в редакторе выделяется целиком лишнее «const»
             self._add_error(
                 bad,
                 "Ожидается имя константы (идентификатор), нельзя повторять 'const'",
@@ -252,7 +229,6 @@ class Parser:
             else:
                 self._add_error(None, "Ожидается идентификатор")
 
-        # ── 2. Двоеточие ':' ─────────────────────────────────────────────────
         self._skip_junk(
             want=TokenType.COLON,
             hard_stop={TokenType.TYPE, TokenType.ASSIGN, TokenType.SEMICOLON},
@@ -261,10 +237,20 @@ class Parser:
 
         colon_found = self._match_repeated(TokenType.COLON, ":")
         if not colon_found:
-            self._add_error(
-                self.current_token or self._last(), "Пропущен ':'", cursor_only=True)
+            if (self._cur_is(TokenType.IDENTIFIER)
+                    and self._peek_is(1, TokenType.TYPE)
+                    and self._peek_is(2, TokenType.ASSIGN)):
+                extra_ident = self.current_token
+                self._add_error(
+                    extra_ident,
+                    "Лишний идентификатор: имя константы может быть только одним; "
+                    "ожидается ':' перед типом данных",
+                )
+                self._advance()
+            else:
+                self._add_error(
+                    self.current_token or self._last(), "Пропущен ':'", cursor_only=True)
 
-        # ── 3. Тип данных ─────────────────────────────────────────────────────
         while (self._cur_is(TokenType.ASSIGN)
                and (self._peek_is(1, TokenType.TYPE)
                     or self._peek_is(1, TokenType.IDENTIFIER))):
@@ -290,7 +276,6 @@ class Parser:
             if self._cur_is(TokenType.IDENTIFIER):
                 self._advance()
 
-        # ── 4. Оператор присваивания '=' ──────────────────────────────────────
         self._skip_junk(
             want=TokenType.ASSIGN,
             hard_stop={TokenType.NUMBER, TokenType.SEMICOLON},
@@ -301,7 +286,6 @@ class Parser:
             self._add_error(
                 self.current_token or self._last(), "Пропущен '='", cursor_only=True)
 
-        # ── 5. Числовой литерал ───────────────────────────────────────────────
         self._skip_junk(
             want=TokenType.NUMBER,
             hard_stop={TokenType.SEMICOLON},
@@ -321,7 +305,6 @@ class Parser:
             if not is_float and not is_float_at_end:
                 self._add_error(cur, "Ожидается числовой литерал", cursor_only=True)
 
-        # ── 6. Точка с запятой ';' ────────────────────────────────────────────
         self._skip_junk(
             want=TokenType.SEMICOLON,
             hard_stop=set(),
@@ -339,13 +322,7 @@ class Parser:
 
         return root
 
-    # ── Вспомогательные методы ────────────────────────────────────────────────
-
     def _skip_junk(self, want, hard_stop, msg):
-        """
-        Пропускает токены != want и не из hard_stop|SYNC_TOKENS,
-        НО только если want есть впереди до hard_stop|SYNC_TOKENS.
-        """
         stop = hard_stop | SYNC_TOKENS
         while (self.current_token
                and self.current_token.type != want
@@ -361,7 +338,6 @@ class Parser:
         return None
 
     def _ident_ahead(self):
-        """True если IDENTIFIER есть впереди до SYNC_TOKENS."""
         for i in range(self.position, len(self.significant_tokens)):
             t = self.significant_tokens[i].type
             if t == TokenType.IDENTIFIER:
@@ -371,7 +347,6 @@ class Parser:
         return False
 
     def _lookahead(self, target, stop):
-        """True если target есть в significant_tokens[position:] раньше любого stop."""
         for i in range(self.position, len(self.significant_tokens)):
             t = self.significant_tokens[i].type
             if t == target:
@@ -381,7 +356,6 @@ class Parser:
         return False
 
     def _skip_to(self, target_type):
-        """Пропускает токены до target_type или якоря. Возвращает True если нашли."""
         self._advance()
         while self.current_token:
             if self.current_token.type == target_type:
@@ -392,13 +366,6 @@ class Parser:
         return False
 
     def _declaration_ahead(self):
-        """
-        True если впереди есть признаки объявления константы.
-        Критерии (до ближайшего CONST/;):
-          - есть ':'
-          - или есть TYPE + '='
-          - или есть 2+ IDENTIFIER + '='
-        """
         has_colon = False
         has_type = False
         has_assign = False
