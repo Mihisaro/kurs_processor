@@ -230,10 +230,20 @@ class Parser:
             elif (self._peek_is(1, TokenType.TYPE)
                   and self._peek_is(2, TokenType.ASSIGN)):
                 ident = self._consume()
+        skipped_duplicate_const = False
+        while not ident and self._cur_is(TokenType.CONST):
+            bad = self.current_token
+            # Без cursor_only — в редакторе выделяется целиком лишнее «const»
+            self._add_error(
+                bad,
+                "Ожидается имя константы (идентификатор), нельзя повторять 'const'",
+            )
+            self._advance()
+            skipped_duplicate_const = True
         if ident:
             root.add_child(SyntaxTreeNode(
                 "identifier", ident.value, ident.line, ident.start_pos))
-        else:
+        elif not skipped_duplicate_const:
             cur = self.current_token or self._last()
             if self.current_token:
                 self._add_error(cur, "Ожидается идентификатор", cursor_only=True)
