@@ -99,7 +99,7 @@ Python и PyQt6
 3. const MARKS: i32 = 100;
 
 # Диаграмма состояний
-![alt text](image-1.png)
+<img width="393" height="651" alt="image" src="https://github.com/user-attachments/assets/f3d8b047-2d08-49c7-837c-5d09b3f457c9" />
 
 
 # Тестовые примеры
@@ -108,19 +108,104 @@ Python и PyQt6
 1. Входная строка: const MAX_SIZE: u32 = 100;
 
 Выход:
-![alt text](image-2.png)
+<img width="1226" height="439" alt="image" src="https://github.com/user-attachments/assets/f698b05e-b7cd-481e-ae55-a586c8f99b07" />
+
 
 СТРОКА С НЕДОПУСТИМЫМ СИМВОЛОМ
 1. Входная строка: const MARKS: i32 = 100@;
 
 Выход:
 
-![alt text](image-3.png)
+<img width="1244" height="475" alt="image" src="https://github.com/user-attachments/assets/9d90cfca-63a3-4ea5-86c5-bfa73b8dce53" />
+
 
 МНОГОСТРОЧНЫЙ ВВОД
 1. Входная строка: const MAX_SIZE: u32 = 100; /n const MARKS: i32 = 100;
 
 Выход: 
-![alt text](image-4.png)
-![alt text](image-5.png)
+<img width="1226" height="592" alt="image" src="https://github.com/user-attachments/assets/597199ca-9e3a-45ed-b662-a444165318ce" />
+
+<img width="1228" height="326" alt="image" src="https://github.com/user-attachments/assets/01e6565a-7ae5-498f-acb5-5530895d49ec" />
+
+
+
+
+# Лабораторная работа №3
+
+Название: Разработка синтаксического анализатора (парсера)
+
+# Цель работы
+Изучить назначение и принципы работы синтаксического анализатора в структуре компилятора. Спроектировать грамматику, построить соответствующую схему метода анализа грамматики и выполнить программную реализацию парсера с нейтрализацией синтаксических ошибок методом Айронса. Интегрировать разработанный модуль в ранее созданный графический интерфейс языкового процессора.
+
+# Вариант задания
+Объявление целочисленной константы с инициализацией на языке Rust
+
+# Допустимые лексемы (токены)
+
+1.Ключевое слово: const (обозначает начало объявления константы).
+
+2.Идентификатор (ID): Имя константы. Должно соответствовать правилам именования в Rust (начинается с буквы или подчеркивания, далее буквы, цифры или подчеркивания).
+
+3.Символ двоеточия: : (отделяет имя переменной от типа).
+
+4.Тип данных: Одно из ключевых слов, обозначающих целочисленные типы в Rust:
+
+   4.1.Знаковые: i8, i16, i32, i64, i128, isize.
+   
+   4.2.Беззнаковые: u8, u16, u32, u64, u128, usize.
+   
+5.Символ присваивания: = (оператор инициализации).
+
+6.Целочисленный литерал: Числовое значение. Может быть записано в разных системах счисления (десятичной, шестнадцатеричной 0x, восьмеричной 0o, двоичной 0b) и может содержать символ подчеркивания _ для улучшения читаемости (например, 1_000).
+
+7.Символ точки с запятой: ; (обязательный терминатор инструкции в Rust).
+
+# Примеры корректных входных строк
+1. const MAX_SIZE: u32 = 100;
+2. const COLOR_RED: i32 = 0xFF0000;
+3. const MARKS: i32 = 100;
+
+
+# Разработка грамматики
+
+P:
+1. <Z> → 'const'<SPACE>
+2. <SPACE> → '_'<ID>
+3. <ID> → letter<COLON>
+4. <COLON> → ':'<TYPE>
+5. <TYPE> → 'i32'<EQUALS>
+6. <EQUALS> → '='<NUMBER>
+7. <NUMBER> → digit<SEMICOLON>
+8. <SEMICOLON> → ';'
+
+VT = {a,b,c...,z,A,B,C,...,Z,_,:,;,=,0,1,2,3,4,5,6,7,8,9}
+
+<img width="558" height="26" alt="image" src="https://github.com/user-attachments/assets/7d0cadd1-f692-47aa-81c7-89a4dc6500a9" />
+
+
+# Метод анализа - граф автоматной грамматики
+
+<img width="627" height="547" alt="image" src="https://github.com/user-attachments/assets/09d0434b-108b-48c7-97a2-5d4edb59b8c8" />
+
+# Диагностика и нейтрализация синтаксических ошибок
+
+<img width="998" height="580" alt="image" src="https://github.com/user-attachments/assets/94243db8-61f5-40df-aa36-8be66e6d9ad0" />
+
+<img width="1007" height="726" alt="image" src="https://github.com/user-attachments/assets/a0f6ea62-cd6b-4f39-a393-22b8004e6699" />
+
+# Тестовые примеры
+
+1. Входная строка: const = i32  100
+
+   Выход:
+   <img width="997" height="281" alt="image" src="https://github.com/user-attachments/assets/91c85bb1-cd13-4d64-aace-3c4c8de51cad" />
+
+2. Входная строка: const MARKS::::: i32 ====== 100; HDNJFKD
+
+   Выход: <img width="999" height="248" alt="image" src="https://github.com/user-attachments/assets/ca4aa2a5-510f-467c-b1f8-649f93ad828a" />
+
+
+   
+
+
 

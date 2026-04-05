@@ -196,7 +196,6 @@ class LexicalAnalyzer:
         return tokens
 
     def validate_const_declaration(self, tokens):
-        """Просто проверяем наличие недопустимых символов"""
         for token in tokens:
             if token.is_error:
                 return False, f"Строка {token.line}: недопустимый символ '{token.value}' на позиции {token.start_pos}"
