@@ -99,7 +99,7 @@ Python и PyQt6
 3. const MARKS: i32 = 100;
 
 # Диаграмма состояний
-![alt text](image-1.png)
+<img width="393" height="651" alt="image" src="https://github.com/user-attachments/assets/f3d8b047-2d08-49c7-837c-5d09b3f457c9" />
 
 
 # Тестовые примеры
@@ -108,19 +108,23 @@ Python и PyQt6
 1. Входная строка: const MAX_SIZE: u32 = 100;
 
 Выход:
-![alt text](image-2.png)
+<img width="1226" height="439" alt="image" src="https://github.com/user-attachments/assets/f698b05e-b7cd-481e-ae55-a586c8f99b07" />
+
 
 СТРОКА С НЕДОПУСТИМЫМ СИМВОЛОМ
 1. Входная строка: const MARKS: i32 = 100@;
 
 Выход:
 
-![alt text](image-3.png)
+<img width="1244" height="475" alt="image" src="https://github.com/user-attachments/assets/9d90cfca-63a3-4ea5-86c5-bfa73b8dce53" />
+
 
 МНОГОСТРОЧНЫЙ ВВОД
 1. Входная строка: const MAX_SIZE: u32 = 100; /n const MARKS: i32 = 100;
 
 Выход: 
-![alt text](image-4.png)
-![alt text](image-5.png)
+<img width="1226" height="592" alt="image" src="https://github.com/user-attachments/assets/597199ca-9e3a-45ed-b662-a444165318ce" />
+
+<img width="1228" height="326" alt="image" src="https://github.com/user-attachments/assets/01e6565a-7ae5-498f-acb5-5530895d49ec" />
+
 
