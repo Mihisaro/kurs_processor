@@ -968,6 +968,13 @@ class TextEditor(QMainWindow):
             pos_item = QTableWidgetItem(str(error.position))
             pos_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             desc_item = QTableWidgetItem(error.description)
+            nav_data = {
+                "line": error.line,
+                "position": error.position,
+                "fragment": error.fragment,
+                "cursor_only": getattr(error, "cursor_only", False),
+            }
+            desc_item.setData(Qt.ItemDataRole.UserRole, nav_data)
             
             # Подсвечиваем ошибки красным
             red_bg = QColor(255, 200, 200)
@@ -1006,7 +1013,17 @@ class TextEditor(QMainWindow):
         """Обработка клика на ошибке синтаксического анализа"""
         row = item.row()
         
-        # Получаем данные об ошибке
+        desc_item = self.syntax_table.item(row, 3)
+        nav = desc_item.data(Qt.ItemDataRole.UserRole) if desc_item else None
+        if nav:
+            self.jump_to_position(
+                nav["line"],
+                nav["position"],
+                None if nav.get("cursor_only") else nav.get("fragment"),
+                cursor_only=nav.get("cursor_only", False),
+            )
+            return
+        
         fragment_item = self.syntax_table.item(row, 0)
         line_item = self.syntax_table.item(row, 1)
         pos_item = self.syntax_table.item(row, 2)
@@ -1014,8 +1031,6 @@ class TextEditor(QMainWindow):
         if fragment_item and line_item and pos_item:
             line = int(line_item.text())
             pos = int(pos_item.text())
-            
-            # Переходим к позиции ошибки
             self.jump_to_position(line, pos, fragment_item.text())
     
     def jump_to_token(self, token):
@@ -1042,8 +1057,10 @@ class TextEditor(QMainWindow):
         text_edit.setFocus()
         text_edit.centerCursor()
     
-    def jump_to_position(self, line, pos, fragment=None):
-        """Переход к указанной строке и позиции"""
+    def jump_to_position(self, line, pos, fragment=None, cursor_only=False):
+        """Переход к указанной строке и позиции.
+        Если cursor_only=True или fragment не задан — только каретка (вставка знака/слова).
+        """
         text_edit = self.get_current_text_edit()
         if not text_edit:
             return
@@ -1051,20 +1068,31 @@ class TextEditor(QMainWindow):
         cursor = text_edit.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
         
-        # Перемещаемся к нужной строке
+        if line <= 0 or pos <= 0:
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            text_edit.setTextCursor(cursor)
+            text_edit.setFocus()
+            text_edit.centerCursor()
+            return
+        
         for _ in range(line - 1):
-            cursor.movePosition(QTextCursor.MoveOperation.NextBlock)
+            if not cursor.movePosition(QTextCursor.MoveOperation.NextBlock):
+                break
         
-        # Перемещаемся к нужной позиции в строке
-        cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
-                            QTextCursor.MoveMode.MoveAnchor, 
-                            pos - 1)
+        block = cursor.block()
+        text = block.text()
+        col_target = max(0, min(pos - 1, len(text)))
+        cursor.setPosition(block.position() + col_target)
         
-        # Выделяем фрагмент, если он есть и это не "конец файла"
-        if fragment and fragment != "конец файла" and fragment != "end of file":
-            cursor.movePosition(QTextCursor.MoveOperation.NextCharacter, 
-                                QTextCursor.MoveMode.KeepAnchor, 
-                                len(fragment))
+        if (not cursor_only) and fragment and fragment not in (
+                "конец файла", "end of file", "EOF"):
+            n = min(len(fragment), max(0, len(text) - col_target))
+            if n > 0:
+                cursor.movePosition(
+                    QTextCursor.MoveOperation.NextCharacter,
+                    QTextCursor.MoveMode.KeepAnchor,
+                    n,
+                )
         
         text_edit.setTextCursor(cursor)
         text_edit.setFocus()
