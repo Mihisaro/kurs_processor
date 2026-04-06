@@ -99,7 +99,7 @@ Python и PyQt6
 3. const MARKS: i32 = 100;
 
 # Диаграмма состояний
-<img width="393" height="651" alt="image" src="https://github.com/user-attachments/assets/f3d8b047-2d08-49c7-837c-5d09b3f457c9" />
+<img width="406" height="667" alt="image" src="https://github.com/user-attachments/assets/bfa82815-7cce-4caa-99fa-086be891d4a6" />
 
 
 # Тестовые примеры
