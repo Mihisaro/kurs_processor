@@ -52,6 +52,8 @@ class Parser:
 
         import re as _re
         self._float_before_pos = set()
+        self._float_end_pos = set()
+        lex_errors = []
         for idx, token in enumerate(tokens):
             if token.is_error:
                 if _re.match(r'^\d+\.\d*$', token.value):
@@ -126,26 +128,83 @@ class Parser:
                 and self._peek_is(1, TokenType.TYPE)
                 and self._peek_is(2, TokenType.ASSIGN)):
             return True
+        if (t.type == TokenType.TYPE
+                and self._peek_is(1, TokenType.IDENTIFIER)
+                and self._peek_is(2, TokenType.COLON)):
+            return True
+        if (t.type == TokenType.TYPE
+                and self._peek_is(1, TokenType.IDENTIFIER)
+                and self._peek_is(2, TokenType.TYPE)
+                and self._peek_is(3, TokenType.ASSIGN)):
+            return True
+        if (t.type == TokenType.NUMBER
+                and self._peek_is(1, TokenType.IDENTIFIER)
+                and self._peek_is(2, TokenType.COLON)):
+            return True
         if t.type == TokenType.IDENTIFIER and self._ident_then_type_before_sync():
             return True
         if t.type == TokenType.IDENTIFIER and self._declaration_ahead():
             return True
+        if self._spurious_token_before_ident_colon():
+            return True
         return False
+
+    def _spurious_token_before_ident_colon(self):
+        """Перед «идентификатор :» — не const/имя/тип/число, а лишний символ (;, :, =, …)."""
+        t = self.current_token
+        if not t:
+            return False
+        if not self._peek_is(1, TokenType.IDENTIFIER):
+            return False
+        if not self._peek_is(2, TokenType.COLON):
+            return False
+        if t.type in (
+                TokenType.CONST,
+                TokenType.IDENTIFIER,
+                TokenType.TYPE,
+                TokenType.NUMBER,
+        ):
+            return False
+        return True
+
+    def _only_semicolons_remaining(self):
+        for i in range(self.position, len(self.significant_tokens)):
+            if self.significant_tokens[i].type != TokenType.SEMICOLON:
+                return False
+        return True
+
+    def _report_const_declaration_fully_missing(self, anchor):
+        """Значимых токенов нет кроме ';' — одна ошибка о пропуске const."""
+        self._add_error(
+            anchor,
+            "Пропущено ключевое слово 'const'",
+            cursor_only=True,
+            const_insert=True,
+        )
 
     def _parse_one_declaration(self):
         if not self.current_token:
             return None
 
         if self.current_token.type == TokenType.SEMICOLON:
-            self._advance()
-            return None
+            if not (self._peek_is(1, TokenType.IDENTIFIER)
+                    and self._peek_is(2, TokenType.COLON)):
+                if self._only_semicolons_remaining():
+                    self._report_const_declaration_fully_missing(self.current_token)
+                    while self._cur_is(TokenType.SEMICOLON):
+                        self._advance()
+                    return None
+                self._advance()
+                return None
 
         if self.current_token.type == TokenType.CONST:
             return self._parse_body(const_token=self._consume())
 
         if self._looks_like_const_keyword_typo(self.current_token):
             bad = self.current_token
-            self._add_error(bad, f"Ожидается ключевое слово 'const', найдено '{bad.value}'")
+            self._add_error(
+                bad, f"Ожидается ключевое слово 'const', найдено '{bad.value}'"
+            )
             self._advance()
             return self._parse_body(const_token=None)
 
@@ -158,8 +217,57 @@ class Parser:
                     or (self._peek_is(1, TokenType.TYPE)
                         and self._peek_is(2, TokenType.ASSIGN))):
                 self._add_error(
-                    bad, "Пропущено ключевое слово 'const'",
-                    cursor_only=True, const_insert=True)
+                    bad,
+                    "Пропущено ключевое слово 'const'",
+                    cursor_only=True,
+                    const_insert=True,
+                )
+            elif (bad.type == TokenType.TYPE
+                  and self._peek_is(1, TokenType.IDENTIFIER)
+                  and self._peek_is(2, TokenType.COLON)):
+                self._add_error(
+                    bad,
+                    f"В начале объявления константы ожидается ключевое слово 'const', "
+                    f"а не тип данных '{bad.value}'",
+                    cursor_only=True,
+                    const_insert=True,
+                )
+                self._advance()
+            elif (bad.type == TokenType.TYPE
+                  and self._peek_is(1, TokenType.IDENTIFIER)
+                  and self._peek_is(2, TokenType.TYPE)
+                  and self._peek_is(3, TokenType.ASSIGN)):
+                self._add_error(
+                    bad,
+                    f"В начале объявления константы ожидается ключевое слово 'const', "
+                    f"а не тип данных '{bad.value}'",
+                    cursor_only=True,
+                    const_insert=True,
+                )
+                self._advance()
+            elif (bad.type == TokenType.NUMBER
+                  and self._peek_is(1, TokenType.IDENTIFIER)
+                  and self._peek_is(2, TokenType.COLON)):
+                self._add_error(
+                    bad,
+                    "Пропущено ключевое слово 'const'",
+                    cursor_only=True,
+                    const_insert=True,
+                )
+                self._add_error(
+                    bad,
+                    "Числовой литерал нельзя использовать вместо идентификатора",
+                )
+                self._advance()
+            elif self._spurious_token_before_ident_colon():
+                self._add_error(
+                    bad,
+                    f"В начале объявления константы ожидается ключевое слово 'const', "
+                    f"а не '{bad.value}'",
+                    cursor_only=True,
+                    const_insert=True,
+                )
+                self._advance()
             elif bad.type == TokenType.IDENTIFIER and not looks_like_const_typo:
                 self._add_error(
                     bad, "Пропущено ключевое слово 'const'",
@@ -205,26 +313,47 @@ class Parser:
 
         self._skip_stray_semicolons_before_identifier()
 
-        while (self.current_token
-               and self.current_token.type != TokenType.IDENTIFIER
-               and self.current_token.type not in SYNC_TOKENS
-               and self.current_token.type != TokenType.COLON
-               and not (self._cur_is(TokenType.TYPE) and self._peek_is(1, TokenType.COLON))
-               and not (self._cur_is(TokenType.TYPE)
-                        and self._peek_is(1, TokenType.TYPE)
-                        and self._peek_is(2, TokenType.ASSIGN))
-               and self._ident_ahead()):
-            self._add_error(self.current_token,
-                            f"Неожиданный токен '{self.current_token.value}', ожидается идентификатор")
-            self._advance()
+        reported_type_as_name = False
+        ident = None
+        while True:
+            while (self.current_token
+                   and self.current_token.type != TokenType.IDENTIFIER
+                   and self.current_token.type not in SYNC_TOKENS
+                   and self.current_token.type != TokenType.COLON
+                   and not (self._cur_is(TokenType.TYPE) and self._peek_is(1, TokenType.COLON))
+                   and not (self._cur_is(TokenType.TYPE)
+                            and self._peek_is(1, TokenType.TYPE)
+                            and self._peek_is(2, TokenType.ASSIGN))
+                   and self._ident_ahead()):
+                self._add_error(self.current_token,
+                                f"Неожиданный токен '{self.current_token.value}', ожидается идентификатор")
+                self._advance()
 
-        ident = self._match(TokenType.IDENTIFIER)
-        if not ident and self._cur_is(TokenType.TYPE):
-            if self._peek_is(1, TokenType.COLON):
-                ident = self._consume()
-            elif (self._peek_is(1, TokenType.TYPE)
-                  and self._peek_is(2, TokenType.ASSIGN)):
-                ident = self._consume()
+            ident = self._match(TokenType.IDENTIFIER)
+            if ident:
+                break
+            if self._cur_is(TokenType.TYPE) and self._peek_is(1, TokenType.COLON):
+                bad_t = self.current_token
+                self._add_error(
+                    bad_t,
+                    f"Запрещено использовать тип данных '{bad_t.value}' вместо идентификатора",
+                )
+                self._advance()
+                reported_type_as_name = True
+                continue
+            if (self._cur_is(TokenType.TYPE)
+                    and self._peek_is(1, TokenType.TYPE)
+                    and self._peek_is(2, TokenType.ASSIGN)):
+                bad_t = self.current_token
+                self._add_error(
+                    bad_t,
+                    f"Запрещено использовать тип данных '{bad_t.value}' вместо идентификатора",
+                )
+                self._advance()
+                reported_type_as_name = True
+                continue
+            break
+
         skipped_duplicate_const = False
         while not ident and self._cur_is(TokenType.CONST):
             bad = self.current_token
@@ -238,13 +367,24 @@ class Parser:
             root.add_child(SyntaxTreeNode(
                 "identifier", ident.value, ident.line, ident.start_pos))
         elif not skipped_duplicate_const:
-            cur = self.current_token or self._last()
-            if self.current_token:
-                self._add_error(cur, "Ожидается идентификатор", cursor_only=True)
-            elif cur:
-                self._add_error(cur, "Ожидается идентификатор", cursor_only=True, insert_after=True)
-            else:
-                self._add_error(None, "Ожидается идентификатор")
+            skip_ident_err = (
+                reported_type_as_name
+                and (
+                    self._cur_is(TokenType.COLON)
+                    or (
+                        self._cur_is(TokenType.TYPE)
+                        and self._peek_is(1, TokenType.ASSIGN)
+                    )
+                )
+            )
+            if not skip_ident_err:
+                cur = self.current_token or self._last()
+                if self.current_token:
+                    self._add_error(cur, "Ожидается идентификатор", cursor_only=True)
+                elif cur:
+                    self._add_error(cur, "Ожидается идентификатор", cursor_only=True, insert_after=True)
+                else:
+                    self._add_error(None, "Ожидается идентификатор")
 
         self._skip_junk(
             want=TokenType.COLON,
@@ -264,6 +404,13 @@ class Parser:
                     "ожидается ':' перед типом данных",
                 )
                 self._advance()
+            elif (self._cur_is(TokenType.TYPE)
+                  and self._peek_is(1, TokenType.ASSIGN)):
+                self._add_error(
+                    self.current_token,
+                    "Пропущен символ ':' между именем константы и типом данных",
+                    cursor_only=True,
+                )
             else:
                 self._add_error(
                     self.current_token or self._last(), "Пропущен ':'", cursor_only=True)
@@ -329,13 +476,12 @@ class Parser:
                 "value", number.value, number.line, number.start_pos))
         else:
             cur = self.current_token or self._last()
-            is_float_before = (hasattr(self, '_float_before_pos')
-                               and cur and cur.start_pos in self._float_before_pos)
-            if not is_float_before:
-                self._add_error(cur, "Ожидается числовой литерал")
-            if not self._skip_to(TokenType.SEMICOLON):
-                self._synchronize()
-                return root
+            is_float = (hasattr(self, '_float_before_pos')
+                        and cur and cur.start_pos in self._float_before_pos)
+            is_float_at_end = (hasattr(self, '_float_end_pos')
+                               and bool(self._float_end_pos))
+            if not is_float and not is_float_at_end:
+                self._add_error(cur, "Ожидается числовой литерал", cursor_only=True)
 
         self._skip_junk(
             want=TokenType.SEMICOLON,
