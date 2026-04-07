@@ -168,19 +168,10 @@ Python и PyQt6
 
 # Разработка грамматики
 
-P:
-1. <Z> → 'const'<SPACE>
-2. <SPACE> → '_'<ID>
-3. <ID> → letter<COLON>
-4. <COLON> → ':'<TYPE>
-5. <TYPE> → 'i32'<EQUALS>
-6. <EQUALS> → '='<NUMBER>
-7. <NUMBER> → digit<SEMICOLON>
-8. <SEMICOLON> → ';'
+<img width="571" height="256" alt="image" src="https://github.com/user-attachments/assets/971399ab-41de-4657-9c2b-39b5aaa06ea5" />
 
-VT = {a,b,c...,z,A,B,C,...,Z,_,:,;,=,0,1,2,3,4,5,6,7,8,9}
 
-<img width="558" height="26" alt="image" src="https://github.com/user-attachments/assets/7d0cadd1-f692-47aa-81c7-89a4dc6500a9" />
+
 
 
 # Метод анализа - граф автоматной грамматики
