@@ -7,6 +7,7 @@ from PyQt6.QtGui import *
 from lexical_analyzer import LexicalAnalyzer, TokenType
 from parser import Parser, ParserError
 from search_engine import SearchEngine, SearchType, SearchResult
+from semantic_analysis import analyze_semantics_from_parse, format_ast_single_tree
 
 TEXTEDITOR_SEARCH_PRESETS = (
     (r"^\d*[0-46-9]$", "search_preset_nums_no5"),
@@ -192,8 +193,40 @@ class TextEditor(QMainWindow):
         
         self.syntax_table.itemClicked.connect(self.on_syntax_item_clicked)
 
+        self.semantic_tab_host = QWidget()
+        semantic_layout = QVBoxLayout(self.semantic_tab_host)
+        semantic_layout.setContentsMargins(4, 4, 4, 4)
+        self.semantic_table = QTableWidget()
+        self.semantic_table.setColumnCount(4)
+        self.semantic_table.setHorizontalHeaderLabels([
+            self.get_text("Неверный фрагмент"),
+            self.get_text("Строка"),
+            self.get_text("Позиция"),
+            self.get_text("Описание ошибки"),
+        ])
+        self.semantic_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.semantic_table.setAlternatingRowColors(True)
+        sem_tbl_header = self.semantic_table.horizontalHeader()
+        sem_tbl_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        sem_tbl_header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        sem_tbl_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        sem_tbl_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.semantic_table.itemClicked.connect(self.on_semantic_item_clicked)
+        self.semantic_output = QPlainTextEdit()
+        self.semantic_output.setReadOnly(True)
+        sem_font = QFont("Courier New", 10)
+        sem_font.setFixedPitch(True)
+        self.semantic_output.setFont(sem_font)
+        self.semantic_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.semantic_splitter.addWidget(self.semantic_table)
+        self.semantic_splitter.addWidget(self.semantic_output)
+        self.semantic_splitter.setStretchFactor(0, 1)
+        self.semantic_splitter.setStretchFactor(1, 2)
+        semantic_layout.addWidget(self.semantic_splitter)
+
         self.results_tab_widget.addTab(self.lexical_table, self.get_text("Лексический анализ"))
         self.results_tab_widget.addTab(self.syntax_table, self.get_text("Синтаксический анализ"))
+        self.results_tab_widget.addTab(self.semantic_tab_host, self.get_text("Семантика и AST"))
 
         self.search_tab_host = QWidget()
         search_tab_layout = QVBoxLayout(self.search_tab_host)
@@ -685,6 +718,8 @@ class TextEditor(QMainWindow):
                 "Неверный фрагмент": "Неверный фрагмент",
                 "Описание ошибки": "Описание ошибки",
                 "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}",
+                "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}": "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}",
+                "Семантика и AST": "Семантика и AST",
                 
                 "Поиск": "Поиск",
                 "Найти:": "Найти:",
@@ -823,6 +858,8 @@ class TextEditor(QMainWindow):
                 "Неверный фрагмент": "Invalid Fragment",
                 "Описание ошибки": "Error Description",
                 "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Total tokens: {} | Lexical errors: {} | Syntax errors: {}",
+                "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}": "Total tokens: {} | Lexical: {} | Syntax: {} | Semantic: {}",
+                "Семантика и AST": "Semantics and AST",
                 
                 "Поиск": "Search",
                 "Найти:": "Find:",
@@ -1470,15 +1507,49 @@ class TextEditor(QMainWindow):
             self.syntax_table.setItem(row, 2, pos_item)
             self.syntax_table.setItem(row, 3, desc_item)
         
-        # 3. Обновляем статусную строку
-        total_errors = lexical_error_count + len(syntax_errors)
-        status = self.get_text("Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}").format(
-            len(tokens), lexical_error_count, len(syntax_errors)
+        _fa, _va, semantic_errors, _ = analyze_semantics_from_parse(
+            tokens, syntax_tree, syntax_errors
+        )
+        self.semantic_table.setRowCount(0)
+        red_bg = QColor(255, 200, 200)
+        for err in semantic_errors:
+            row = self.semantic_table.rowCount()
+            self.semantic_table.insertRow(row)
+            frag_item = QTableWidgetItem(err.fragment or "")
+            line_item = QTableWidgetItem(str(err.line))
+            line_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            pos_item = QTableWidgetItem(str(err.column))
+            pos_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            desc_item = QTableWidgetItem(err.message)
+            nav_data = {
+                "line": err.line,
+                "position": err.column,
+                "fragment": err.fragment or "",
+                "cursor_only": False,
+            }
+            desc_item.setData(Qt.ItemDataRole.UserRole, nav_data)
+            for it in (frag_item, line_item, pos_item, desc_item):
+                it.setBackground(red_bg)
+            self.semantic_table.setItem(row, 0, frag_item)
+            self.semantic_table.setItem(row, 1, line_item)
+            self.semantic_table.setItem(row, 2, pos_item)
+            self.semantic_table.setItem(row, 3, desc_item)
+        self.semantic_output.setPlainText(format_ast_single_tree(_fa))
+
+        status = self.get_text(
+            "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}"
+        ).format(
+            len(tokens),
+            lexical_error_count,
+            len(syntax_errors),
+            len(semantic_errors),
         )
         self.statusBar().showMessage(status)
-        
-        # Если есть синтаксические ошибки, переключаемся на вкладку синтаксического анализа
-        if syntax_errors:
+
+        sem_idx = self.results_tab_widget.indexOf(self.semantic_tab_host)
+        if semantic_errors and sem_idx >= 0:
+            self.results_tab_widget.setCurrentIndex(sem_idx)
+        elif syntax_errors:
             self.results_tab_widget.setCurrentIndex(1)
         else:
             self.results_tab_widget.setCurrentIndex(0)
@@ -1490,6 +1561,28 @@ class TextEditor(QMainWindow):
             if token:
                 self.jump_to_token(token)
     
+    def on_semantic_item_clicked(self, item):
+        row = item.row()
+        desc_item = self.semantic_table.item(row, 3)
+        nav = desc_item.data(Qt.ItemDataRole.UserRole) if desc_item else None
+        if nav:
+            self.jump_to_position(
+                nav["line"],
+                nav["position"],
+                nav.get("fragment") or None,
+                cursor_only=nav.get("cursor_only", False),
+            )
+            return
+        frag_item = self.semantic_table.item(row, 0)
+        line_item = self.semantic_table.item(row, 1)
+        pos_item = self.semantic_table.item(row, 2)
+        if frag_item and line_item and pos_item:
+            self.jump_to_position(
+                int(line_item.text()),
+                int(pos_item.text()),
+                frag_item.text() or None,
+            )
+
     def on_syntax_item_clicked(self, item):
         row = item.row()
         
