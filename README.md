@@ -102,6 +102,7 @@ Python и PyQt6
 <img width="406" height="667" alt="image" src="https://github.com/user-attachments/assets/bfa82815-7cce-4caa-99fa-086be891d4a6" />
 
 
+
 # Тестовые примеры
 
 КОРРЕКТНАЯ СТРОКА
@@ -168,7 +169,8 @@ Python и PyQt6
 
 # Разработка грамматики
 
-<img width="571" height="256" alt="image" src="https://github.com/user-attachments/assets/971399ab-41de-4657-9c2b-39b5aaa06ea5" />
+<img width="740" height="334" alt="image" src="https://github.com/user-attachments/assets/d1a7686b-362a-417c-bf2b-90874b252bf9" />
+
 
 
 
@@ -176,7 +178,8 @@ Python и PyQt6
 
 # Метод анализа - граф автоматной грамматики
 
-<img width="627" height="547" alt="image" src="https://github.com/user-attachments/assets/09d0434b-108b-48c7-97a2-5d4edb59b8c8" />
+<img width="851" height="630" alt="image" src="https://github.com/user-attachments/assets/f3141166-74fc-40bf-997c-9f804ec90614" />
+
 
 # Диагностика и нейтрализация синтаксических ошибок
 
