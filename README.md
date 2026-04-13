@@ -171,9 +171,11 @@ Python и PyQt6
 
 <img width="740" height="334" alt="image" src="https://github.com/user-attachments/assets/d1a7686b-362a-417c-bf2b-90874b252bf9" />
 
+# Классификация грамматики 
+Грамматика автоматная 
 
-
-
+<img width="398" height="43" alt="image" src="https://github.com/user-attachments/assets/51d0e2a3-f017-4c45-818e-1bacb75066c6" />
+<img width="620" height="298" alt="image" src="https://github.com/user-attachments/assets/61c2aa32-0d98-4f0e-973e-dc267eabfa3e" />
 
 
 # Метод анализа - граф автоматной грамматики
