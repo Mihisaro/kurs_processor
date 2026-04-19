@@ -68,9 +68,13 @@ class Parser:
                         self._float_end_pos.add(token.end_pos)
                 else:
                     msg = f"Лексическая ошибка: недопустимый символ '{token.value}'"
+                    if token.value == "#":
+                        msg += " (лишний знак внутри слова или числа)"
                 lex_errors.append(ParserError(
                     token.value, token.line, token.start_pos, msg
                 ))
+
+        self._syntax_suppress_lines = {e.line for e in lex_errors}
 
         self.significant_tokens = [
             t for t in tokens
@@ -79,6 +83,8 @@ class Parser:
         ]
 
         if not self.significant_tokens:
+            self.errors.extend(lex_errors)
+            self.errors.sort(key=lambda e: (e.line, e.position))
             return None, self.errors
 
         self._update()
@@ -196,6 +202,12 @@ class Parser:
                     return None
                 self._advance()
                 return None
+
+        if self.current_token.line in getattr(self, "_syntax_suppress_lines", ()):
+            ln = self.current_token.line
+            while self.current_token and self.current_token.line == ln:
+                self._advance()
+            return None
 
         if self.current_token.type == TokenType.CONST:
             return self._parse_body(const_token=self._consume())
@@ -355,14 +367,41 @@ class Parser:
             break
 
         skipped_duplicate_const = False
-        while not ident and self._cur_is(TokenType.CONST):
+        dup_no_name_colon = False
+        if not ident and self._cur_is(TokenType.CONST):
             bad = self.current_token
-            self._add_error(
-                bad,
-                "Ожидается имя константы (идентификатор), нельзя повторять 'const'",
-            )
-            self._advance()
+            n_dup = 0
+            while self._cur_is(TokenType.CONST):
+                self._advance()
+                n_dup += 1
             skipped_duplicate_const = True
+            if self._cur_is(TokenType.COLON):
+                dup_no_name_colon = True
+                if n_dup == 1:
+                    msg = (
+                        "Повторное слово 'const' сразу перед ':' — пропущено имя константы "
+                        "(нужно: const имя : тип = значение ;)"
+                    )
+                else:
+                    msg = (
+                        f"Лишние слова 'const' подряд ({n_dup}) сразу перед ':' — пропущено имя константы "
+                        "(нужно: const имя : тип ...)"
+                    )
+                self._add_error(bad, msg)
+            elif n_dup == 1:
+                self._add_error(
+                    bad,
+                    "Повторное ключевое слово 'const' "
+                    "(допускается только одно перед именем константы)",
+                )
+            else:
+                self._add_error(
+                    bad,
+                    f"Лишние ключевые слова 'const' подряд ({n_dup} раз): "
+                    f"перед именем константы допускается только одно ключевое слово 'const'",
+                )
+        if not ident and self._cur_is(TokenType.IDENTIFIER) and self._peek_is(1, TokenType.COLON):
+            ident = self._consume()
         if ident:
             root.add_child(SyntaxTreeNode(
                 "identifier", ident.value, ident.line, ident.start_pos))
@@ -385,6 +424,17 @@ class Parser:
                     self._add_error(cur, "Ожидается идентификатор", cursor_only=True, insert_after=True)
                 else:
                     self._add_error(None, "Ожидается идентификатор")
+        elif dup_no_name_colon:
+            pass
+        elif not (
+                self._cur_is(TokenType.IDENTIFIER) and self._peek_is(1, TokenType.COLON)):
+            cur = self.current_token or self._last()
+            if self.current_token:
+                self._add_error(cur, "Ожидается идентификатор", cursor_only=True)
+            elif cur:
+                self._add_error(cur, "Ожидается идентификатор", cursor_only=True, insert_after=True)
+            else:
+                self._add_error(None, "Ожидается идентификатор")
 
         self._skip_junk(
             want=TokenType.COLON,
@@ -609,10 +659,11 @@ class Parser:
             count += 1
             self._advance()
         if count > 1:
-            self.errors.append(ParserError(
-                symbol * count, start.line, start.start_pos,
-                f"Повторяющийся оператор '{symbol}' ({count} раз)"
-            ))
+            if start.line not in getattr(self, "_syntax_suppress_lines", ()):
+                self.errors.append(ParserError(
+                    symbol * count, start.line, start.start_pos,
+                    f"Повторяющийся оператор '{symbol}' ({count} раз)"
+                ))
         return True
 
     def _match(self, token_type):
@@ -641,6 +692,8 @@ class Parser:
 
     def _add_error(self, token, description, *, cursor_only=False,
                    insert_after=False, const_insert=False, fragment=None):
+        if token and token.line in getattr(self, "_syntax_suppress_lines", ()):
+            return
         if token:
             line = token.line
             if cursor_only:
