@@ -270,6 +270,10 @@ III задача:
 <img width="1249" height="431" alt="image" src="https://github.com/user-attachments/assets/02b9701b-0f36-404a-a792-829f86e5a931" />
 
 
+# Дополнительное задание
+<img width="1201" height="594" alt="image" src="https://github.com/user-attachments/assets/f12873f3-15c1-4936-98a4-34be66650840" />
+
+
 # Лабораторная работа №5
 
 Название: Построение AST и проверка контекстно-зависимых условий
