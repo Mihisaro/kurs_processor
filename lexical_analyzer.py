@@ -1,4 +1,12 @@
 from enum import Enum
+import re
+
+# Алфавит исходного текста языка: буквы, цифры, _, :, =, ;, пробел, таб;
+# слова из keywords/types распознаются отдельно.
+_LEX_ALPHABET = set(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:=; \t"
+)
+
 
 class TokenType(Enum):
     CONST = (1, "Ключевое слово const")
@@ -36,26 +44,24 @@ class Token:
     def is_error(self):
         return self.type.is_error
 
+def _is_float_error_lexeme(value: str) -> bool:
+    return bool(re.match(r"^\d+\.\d*$", value or ""))
+
+
+DATA_TYPE_NAMES = frozenset({
+    "i8", "i16", "i32", "i64", "i128",
+    "u8", "u16", "u32", "u64", "u128",
+})
+
+
 class LexicalAnalyzer:
     def __init__(self):
-        self.allowed_chars = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:=; ')
-
+        self.allowed_chars = _LEX_ALPHABET
         self.keywords = {
             'const': TokenType.CONST,
         }
 
-        self.types = {
-            'i32': TokenType.TYPE,
-            'i8': TokenType.TYPE,
-            'i16': TokenType.TYPE,
-            'i64': TokenType.TYPE,
-            'i128': TokenType.TYPE,
-            'u8': TokenType.TYPE,
-            'u16': TokenType.TYPE,
-            'u32': TokenType.TYPE,
-            'u64': TokenType.TYPE,
-            'u128': TokenType.TYPE,
-        }
+        self.types = {name: TokenType.TYPE for name in DATA_TYPE_NAMES}
 
         self.single_chars = {
             ':': TokenType.COLON,
@@ -122,6 +128,30 @@ class LexicalAnalyzer:
                 ))
                 i += 1
                 continue
+
+            # Отрицательные целые: '-' допустим только вплотную перед цифрами.
+            # И только в позиции литерала (после '=' с пробелами/табами или в начале строки).
+            if line[i] == '-' and (i + 1) < length and line[i + 1].isdigit():
+                k = i - 1
+                while k >= 0 and line[k] in (' ', '\t'):
+                    k -= 1
+                allow_negative = (k < 0) or (line[k] == '=')
+                if not allow_negative:
+                    # Пусть обработается как лексическая ошибка ниже.
+                    pass
+                else:
+                    start = i
+                    i += 1
+                    while i < length and line[i].isdigit():
+                        i += 1
+                    tokens.append(Token(
+                        TokenType.NUMBER,
+                        line[start:i],
+                        line_num,
+                        start + 1,
+                        i
+                    ))
+                    continue
 
             if line[i].isalpha() or line[i] == '_':
                 start = i
@@ -198,6 +228,16 @@ class LexicalAnalyzer:
     def validate_const_declaration(self, tokens):
         for token in tokens:
             if token.is_error:
-                return False, f"Строка {token.line}: недопустимый символ '{token.value}' на позиции {token.start_pos}"
+                if _is_float_error_lexeme(token.value):
+                    msg = (
+                        f"Строка {token.line}: дробное число '{token.value}' недопустимо "
+                        f"(позиция {token.start_pos}); используйте целый литерал"
+                    )
+                else:
+                    msg = (
+                        f"Строка {token.line}: недопустимый символ или лексема "
+                        f"'{token.value}' на позиции {token.start_pos}"
+                    )
+                return False, msg
         return True, "OK"
     
