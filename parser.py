@@ -338,6 +338,10 @@ class Parser:
         tok = self._peek_token(offset)
         return tok is not None and tok.type == token_type
 
+    def _gap(self, a: Token, b: Token) -> bool:
+        """Есть пробел(ы) между значимыми лексемами на одной строке."""
+        return a is not None and b is not None and a.line == b.line and b.start_pos > (a.end_pos + 1)
+
     def _try_recover_split_const_keyword(self, children: List[SyntaxTreeNode]) -> bool:
         """con#st → буквы «const»: синтаксическая ошибка на фрагмент (лексика по # уже есть)."""
         sig = self.significant_tokens
@@ -349,6 +353,9 @@ class Parser:
 
         def _adj(a: Token, b: Token) -> bool:
             return a.line == b.line and (a.end_pos + 1) == b.start_pos
+
+        def _gap(a: Token, b: Token) -> bool:
+            return a.line == b.line and b.start_pos > (a.end_pos + 1)
 
         while j < len(sig):
             t = sig[j]
@@ -378,6 +385,15 @@ class Parser:
                 continue
             if t.type == TokenType.IDENTIFIER:
                 if toks and toks[-1].type == TokenType.IDENTIFIER:
+                    # Разрешаем «con st» (лишний пробел внутри const), но не склеиваем прочие пары слов.
+                    if (
+                        len(toks) == 1
+                        and _gap(toks[-1], t)
+                        and (_letters_only_az(toks[-1].value + t.value) == "const")
+                    ):
+                        toks.append(t)
+                        j += 1
+                        continue
                     break
                 toks.append(t)
                 j += 1
@@ -385,6 +401,26 @@ class Parser:
             break
         if not toks:
             return False
+        # «con st» (лишний пробел внутри ключевого слова) — отдельная, более понятная ошибка.
+        if (
+            len(toks) == 2
+            and toks[0].type == TokenType.IDENTIFIER
+            and toks[1].type == TokenType.IDENTIFIER
+            and self._gap(toks[0], toks[1])
+            and (_letters_only_az(toks[0].value + toks[1].value) == "const")
+        ):
+            raw_spaced = f"{toks[0].value} {toks[1].value}"
+            self.errors.append(ParserError(
+                raw_spaced,
+                toks[0].line,
+                toks[0].start_pos,
+                "Лишний пробел внутри ключевого слова «const» (напишите «const» одним словом)",
+            ))
+            self.position = idx + 2
+            self._update()
+            children.append(SyntaxTreeNode(
+                "keyword", "const", toks[0].line, toks[0].start_pos))
+            return True
         raw = "".join(x.value for x in toks)
         letters = _letters_only_az(raw)
         if letters != "const" and _levenshtein(letters, "const") > 1:
@@ -854,6 +890,37 @@ class Parser:
                 if t0 is None:
                     self._add_error_eof(1)
                     return None
+                # «const MA RKS: ...» — лишний пробел в идентификаторе (склеиваем).
+                if (
+                    t0.type == TokenType.IDENTIFIER
+                    and self._peek_is(1, TokenType.IDENTIFIER)
+                    and self._peek_is(2, TokenType.COLON)
+                    and self._gap(t0, self._peek_token(1))
+                ):
+                    t1 = self._peek_token(1)
+                    assert t1 is not None
+                    raw_spaced = f"{t0.value} {t1.value}"
+                    merged = t0.value + t1.value
+                    self.errors.append(ParserError(
+                        raw_spaced,
+                        t0.line,
+                        t0.start_pos,
+                        "Лишний пробел внутри идентификатора имени константы (напишите имя одним словом)",
+                    ))
+                    ident_tok = Token(
+                        TokenType.IDENTIFIER,
+                        merged,
+                        t0.line,
+                        t0.start_pos,
+                        t1.end_pos,
+                    )
+                    children.append(SyntaxTreeNode(
+                        "identifier", ident_tok.value,
+                        ident_tok.line, ident_tok.start_pos))
+                    self._consume()
+                    self._consume()
+                    state = 2
+                    continue
                 # «const 100: ...» — число вместо имени константы. Сообщаем и восстанавливаемся,
                 # продолжая разбор как будто это идентификатор.
                 if (
@@ -1262,6 +1329,36 @@ class Parser:
                     state = 4
                     continue
                 if t.type == TokenType.IDENTIFIER:
+                    # «...: i 32 = ...» — лишний пробел в имени типа (склеиваем i32).
+                    if (
+                        self._peek_is(1, TokenType.NUMBER)
+                        and self._peek_token(1) is not None
+                        and self._gap(t, self._peek_token(1))
+                        and self._peek_is(2, TokenType.ASSIGN)
+                    ):
+                        t1 = self._peek_token(1)
+                        assert t1 is not None
+                        raw_spaced = f"{t.value} {t1.value}"
+                        merged = (t.value + t1.value)
+                        self.errors.append(ParserError(
+                            raw_spaced,
+                            t.line,
+                            t.start_pos,
+                            "Лишний пробел внутри имени типа данных (напишите тип одним словом, например i32)",
+                        ))
+                        type_tok = Token(
+                            TokenType.TYPE,
+                            merged,
+                            t.line,
+                            t.start_pos,
+                            t1.end_pos,
+                        )
+                        children.append(SyntaxTreeNode(
+                            "type", type_tok.value, type_tok.line, type_tok.start_pos))
+                        self._consume()
+                        self._consume()
+                        state = 4
+                        continue
                     mug = self._gather_mangled_type_token_cluster(self.position)
                     if mug is not None:
                         raw, assign_idx, ast_name, spanned = mug
@@ -1425,6 +1522,37 @@ class Parser:
                 return None
 
             if state == 5:
+                # «... = 1 00;» — лишний пробел в числовом литерале (склеиваем 100).
+                if (
+                    t is not None
+                    and t.type == TokenType.NUMBER
+                    and self._peek_is(1, TokenType.NUMBER)
+                    and self._peek_token(1) is not None
+                    and self._gap(t, self._peek_token(1))
+                ):
+                    t1 = self._peek_token(1)
+                    assert t1 is not None
+                    merged = t.value + t1.value
+                    raw_spaced = f"{t.value} {t1.value}"
+                    self.errors.append(ParserError(
+                        raw_spaced,
+                        t.line,
+                        t.start_pos,
+                        "Лишний пробел внутри числового литерала (напишите число слитно, например 100)",
+                    ))
+                    value_tok = Token(
+                        TokenType.NUMBER,
+                        merged,
+                        t.line,
+                        t.start_pos,
+                        t1.end_pos,
+                    )
+                    children.append(SyntaxTreeNode(
+                        "value", value_tok.value, value_tok.line, value_tok.start_pos))
+                    self._consume()
+                    self._consume()
+                    state = 6
+                    continue
                 lit = self._gather_mangled_int_literal_cluster(self.position)
                 if lit is not None:
                     raw, j, digits, spanned, ln, spos, epos = lit

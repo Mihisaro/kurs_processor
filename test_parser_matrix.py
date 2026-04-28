@@ -57,6 +57,7 @@ def main():
         ("const MARKS: i!32 = 1,00:", 3, 0, "mangled_type_mangled_number_trailing_colon_seen_as_missing_semicolon"),
         ("const MARKS i32 = 100", 2, 0, "missing_colon_semicolon"),
         ("const MARKS: i32 = 100", 1, 0, "missing_semicolon_only"),
+        ("con st MA RKS: i 32 = 1 00;", 4, 1, "spaces_inside_lexemes_four_errors_but_decl_recovers"),
         ("cost MARKS i2  100", 5, 0, "five_syntax_keyword_colon_type_eq_semi"),
         ("cost # MARKS # i2 100", 7, 0, "lex_hash_plus_syntax_seven_errors"),
         ("i32 : i32 = 100", 3, 0, "leading_type_missing_name_and_semicolon"),
