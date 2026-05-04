@@ -345,6 +345,78 @@ python main.py
 ```
 
 
+# Лабораторная работа №6
+
+Название: Создание внутренней формы представления программы
+
+Вариант задания: Грамматика на языке Rust
+Язык программирования: Rust
+
+Полное определение грамматики:
+
+E → TA
+
+A → ε | + TA | - TA
+
+T → FB
+
+B → ε | * FB | / FB | % FB
+
+F → num | id | (E)
+
+id → letter {letter | digit | _}
+
+num → digit {digit}
+
+
+Примеры верных строк:
+
+1. 1 + 2
+2. 10 / 2
+3. 2 + (3 -2)
+4. 35 * 2 - 45
+
+
+# Лексические и синтаксические ошибки
+
+Диаграмма лексера:
+
+<img width="424" height="770" alt="image" src="https://github.com/user-attachments/assets/9ec88c35-6989-422e-b17c-984e01bc4318" />
+
+
+Схема рекурсивного спуска:
+
+<img width="952" height="611" alt="image" src="https://github.com/user-attachments/assets/050fba2c-7606-489d-9ed7-aef34aa7fdb7" />
+
+Тестовые примеры:
+
+<img width="999" height="736" alt="image" src="https://github.com/user-attachments/assets/046fa1b7-e708-4424-92be-6b2e67628d28" />
+
+<img width="998" height="736" alt="image" src="https://github.com/user-attachments/assets/3e5be467-daac-448a-a68e-6dfd6dbe6e6e" />
+
+<img width="1004" height="740" alt="image" src="https://github.com/user-attachments/assets/a09a1482-3bad-4be8-b245-c425d43e1b8b" />
+
+
+# Внутренняя форма представления программы (тетрады):
+
+<img width="524" height="114" alt="image" src="https://github.com/user-attachments/assets/d14a9f85-7da8-4960-97a8-2517f46c033c" />
+
+<img width="592" height="155" alt="image" src="https://github.com/user-attachments/assets/0d7cf481-1f53-4d4a-8ced-8efe73054487" />
+
+
+# ПОЛИЗ:
+
+<img width="464" height="192" alt="image" src="https://github.com/user-attachments/assets/4dbdc717-4775-4046-8f49-4b3069fd1892" />
+
+<img width="451" height="215" alt="image" src="https://github.com/user-attachments/assets/f070f1b4-db68-4aad-9206-b81c8dfed72f" />
+
+
+
+
+
+
+
+
 
 
 
