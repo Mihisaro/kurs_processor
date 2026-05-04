@@ -381,7 +381,11 @@ num → digit {digit}
 
 Диаграмма лексера:
 
-<img width="424" height="770" alt="image" src="https://github.com/user-attachments/assets/9ec88c35-6989-422e-b17c-984e01bc4318" />
+<img width="422" height="724" alt="image" src="https://github.com/user-attachments/assets/9b0e4de7-06c1-4f0d-9859-05acf713bb48" />
+
+
+
+
 
 
 Схема рекурсивного спуска:
