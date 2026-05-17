@@ -444,6 +444,7 @@ Clang, LLVM, opt, Graphviz. Среда: Ubuntu (VirtualBox), LLVM 21.
 sudo apt update
 sudo apt install clang llvm graphviz -y
 ```
+<img width="974" height="327" alt="image" src="https://github.com/user-attachments/assets/d8711309-5c15-467a-8596-fd2b5db14e3c" />
 
 Проверка версий:
 ```
@@ -451,6 +452,7 @@ clang --version
 opt --version
 dot -V
 ```
+<img width="974" height="304" alt="image" src="https://github.com/user-attachments/assets/a7d126fa-5d1c-47b5-9d29-1c034856aed9" />
 
 Создание рабочей папки:
 ```
@@ -458,7 +460,8 @@ mkdir -p ~/lab7
 cd ~/lab7
 ```
 
-Выход:
+<img width="974" height="93" alt="image" src="https://github.com/user-attachments/assets/9642c425-a086-49dc-9a3a-22c60637e8f3" />
+
 
 
 
@@ -490,9 +493,10 @@ int main() {
 clang -Xclang -ast-dump -fsyntax-only -fno-color-diagnostics main.c | tee main_ast.txt
 ```
 
-В отчёт включить только фрагменты AST для функций square и main (строки с main.c). Полный дамп с stdio.h не прикладывать.
+<img width="974" height="171" alt="image" src="https://github.com/user-attachments/assets/97b1dad5-f376-4457-ab7c-3c014d3bb33d" />
 
-Выход:
+<img width="974" height="513" alt="image" src="https://github.com/user-attachments/assets/1eddae2b-d4a5-45cf-81a8-5f4f058bce68" />
+
 
 
 
@@ -505,7 +509,8 @@ clang -O0 -S -emit-llvm main.c -o main_O0.ll
 
 В файле main_O0.ll: переменные через alloca, много load и store, вызов функции square.
 
-Выход:
+<img width="974" height="533" alt="image" src="https://github.com/user-attachments/assets/75a06282-a4f1-41b9-9174-b65fc08762a3" />
+
 
 
 
@@ -518,7 +523,8 @@ clang -O2 -S -emit-llvm main.c -o main_O2.ll
 
 После -O2: функция square может быть встроена и удалена, меньше инструкций, упрощение CFG.
 
-Выход:
+<img width="974" height="429" alt="image" src="https://github.com/user-attachments/assets/960e9790-e39f-4bef-b6fe-dde26dc72a0a" />
+
 
 
 
@@ -529,6 +535,9 @@ clang -O2 -S -emit-llvm main.c -o main_O2.ll
 opt -passes=default<O2> -S main_O0.ll -o main_opt_O2.ll
 ```
 
+<img width="974" height="524" alt="image" src="https://github.com/user-attachments/assets/dcd6a687-9aa6-47bd-9e59-66fc0488fc42" />
+
+
 # Построение CFG (общая часть)
 
 До оптимизации:
@@ -536,6 +545,7 @@ opt -passes=default<O2> -S main_O0.ll -o main_opt_O2.ll
 opt -passes=dot-cfg -disable-output main_O0.ll
 dot -Tpng .main.dot -o main_cfg_O0.png
 ```
+
 
 После оптимизации:
 ```
@@ -547,10 +557,12 @@ dot -Tpng .main.dot -o main_cfg_O2.png
 
 CFG для main до оптимизации (-O0):
 
+<img width="974" height="416" alt="image" src="https://github.com/user-attachments/assets/0dbd5b86-47ce-4385-ba53-d8a0feefb21f" />
 
 
 CFG для main после оптимизации (-O2):
 
+<img width="974" height="232" alt="image" src="https://github.com/user-attachments/assets/94e64ed7-e4a0-40e2-bf6d-183a61be5d8d" />
 
 
 # Выводы по общей части
@@ -604,7 +616,7 @@ grep -n "icmp" const_int_O0.ll
 
 В IR: глобальная константа @LIMIT = 100, в main — цикл, сравнение icmp slt с 100.
 
-Выход:
+<img width="974" height="98" alt="image" src="https://github.com/user-attachments/assets/6d2f2121-9235-4d8a-9450-6f3d9acc7b56" />
 
 
 
@@ -617,7 +629,7 @@ clang -Xclang -ast-dump -fsyntax-only -fno-color-diagnostics const_int.c > const
 
 В AST: VarDecl для LIMIT, ForStmt, условие i < LIMIT.
 
-Выход:
+<img width="974" height="459" alt="image" src="https://github.com/user-attachments/assets/d4ecbf75-aadb-4dca-93e0-8080b10a4c55" />
 
 
 
@@ -640,10 +652,12 @@ grep -n "LIMIT\|icmp" const_int_O0.ll const_int_O2.ll
 
 Выход (grep):
 
+<img width="974" height="189" alt="image" src="https://github.com/user-attachments/assets/c71aa1ea-5ba9-4e74-91ae-b0c4054beded" />
 
 
 Выход (фрагмент main в const_int_O2.ll):
 
+<img width="974" height="138" alt="image" src="https://github.com/user-attachments/assets/33dab986-79c2-4847-89df-d87ed3d22e23" />
 
 
 # Задание 3. Проходы sccp и ipsccp
@@ -662,7 +676,10 @@ grep -n "LIMIT\|icmp" const_int_O0.ll const_int_sccp.ll const_int_ipsccp.ll
 sccp — подстановка констант в пределах функции.
 ipsccp — межпроцедурное распространение констант.
 
-Выход:
+<img width="969" height="665" alt="image" src="https://github.com/user-attachments/assets/786db4cc-c86b-44ee-8f32-8a14fbe3c0de" />
+
+<img width="974" height="721" alt="image" src="https://github.com/user-attachments/assets/a209ad06-15a1-4fc5-8d9b-ba3e9323ae1a" />
+
 
 
 
@@ -682,10 +699,12 @@ dot -Tpng .main.dot -o const_int_cfg_O2.png
 
 CFG до оптимизации (const_int_cfg_O0.png):
 
+<img width="974" height="1013" alt="image" src="https://github.com/user-attachments/assets/b2738407-ce82-4b06-a911-67768dcc17e6" />
 
 
 CFG после оптимизации (const_int_cfg_O2.png):
 
+<img width="388" height="167" alt="image" src="https://github.com/user-attachments/assets/b839e9c0-6d30-4cea-a5d9-f433d382d845" />
 
 
 # Задание 5. Выводы по индивидуальной части
@@ -698,20 +717,10 @@ CFG после оптимизации (const_int_cfg_O2.png):
 6. CFG до оптимизации содержит блоки цикла; после -O2 — один простой блок.
 
 
-# Соответствие команд методичке и LLVM 21
-
-| Методичка | LLVM 21 |
-|-----------|---------|
-| opt -dot-cfg file.ll | opt -passes=dot-cfg -disable-output file.ll |
-| opt -constprop file.ll | opt -passes=sccp -S file.ll -o out.ll |
-| opt -ipsccp file.ll | opt -passes=ipsccp -S file.ll -o out.ll |
 
 
-# Файлы в папке ~/lab7
 
-main.c, main_O0.ll, main_O2.ll, main_ast.txt, main_cfg_O0.png, main_cfg_O2.png
 
-const_int.c, const_int_O0.ll, const_int_O2.ll, const_int_sccp.ll, const_int_ipsccp.ll, const_int_ast.txt, const_int_cfg_O0.png, const_int_cfg_O2.png
 
 
 
