@@ -415,6 +415,303 @@ num → digit {digit}
 <img width="451" height="215" alt="image" src="https://github.com/user-attachments/assets/f070f1b4-db68-4aad-9206-b81c8dfed72f" />
 
 
+# Лабораторная работа №7
+
+Название: Преобразование и анализ кода с использованием Clang и LLVM
+
+# Цель работы
+Познакомиться с инструментами Clang и LLVM, научиться получать абстрактное синтаксическое дерево (AST) и промежуточное представление (LLVM IR) для кода на C/C++, применять базовые оптимизации, строить граф потока управления (CFG), а также проанализировать влияние оптимизаций на синтаксические конструкции языка.
+
+# Постановка задачи
+1. Установить Clang, LLVM, opt и Graphviz.
+2. Скомпилировать простой C-файл и получить AST и LLVM IR.
+3. Использовать opt для оптимизации IR.
+4. Построить CFG до и после оптимизаций.
+5. Выполнить индивидуальное задание по варианту.
+
+# Сведения об авторе.
+Сорочинский Михаил Владимирович, АВТ-314
+
+# Используемые технологии
+Clang, LLVM, opt, Graphviz. Среда: Ubuntu (VirtualBox), LLVM 21.
+
+В методичке указаны флаги `-dot-cfg` и `-constprop` для старого opt. В LLVM 21 используется синтаксис `opt -passes=...`. Вместо `-constprop` применяется проход `sccp`.
+
+# Установка и подготовка среды
+
+Команда установки:
+```
+sudo apt update
+sudo apt install clang llvm graphviz -y
+```
+
+Проверка версий:
+```
+clang --version
+opt --version
+dot -V
+```
+
+Создание рабочей папки:
+```
+mkdir -p ~/lab7
+cd ~/lab7
+```
+
+Выход:
+
+
+
+# Общая часть работы
+
+# Исходный код main.c
+
+Программа на языке C (пример из методички):
+
+```
+#include <stdio.h>
+
+int square(int x) {
+    return x * x;
+}
+
+int main() {
+    int a = 5;
+    int b = square(a);
+    printf("%d\n", b);
+    return 0;
+}
+```
+
+# Получение AST
+
+Команда:
+```
+clang -Xclang -ast-dump -fsyntax-only -fno-color-diagnostics main.c | tee main_ast.txt
+```
+
+В отчёт включить только фрагменты AST для функций square и main (строки с main.c). Полный дамп с stdio.h не прикладывать.
+
+Выход:
+
+
+
+# Генерация LLVM IR без оптимизаций (-O0)
+
+Команда:
+```
+clang -O0 -S -emit-llvm main.c -o main_O0.ll
+```
+
+В файле main_O0.ll: переменные через alloca, много load и store, вызов функции square.
+
+Выход:
+
+
+
+# Генерация LLVM IR с оптимизацией (-O2)
+
+Команда:
+```
+clang -O2 -S -emit-llvm main.c -o main_O2.ll
+```
+
+После -O2: функция square может быть встроена и удалена, меньше инструкций, упрощение CFG.
+
+Выход:
+
+
+
+# Оптимизация IR через opt
+
+Команда:
+```
+opt -passes=default<O2> -S main_O0.ll -o main_opt_O2.ll
+```
+
+# Построение CFG (общая часть)
+
+До оптимизации:
+```
+opt -passes=dot-cfg -disable-output main_O0.ll
+dot -Tpng .main.dot -o main_cfg_O0.png
+```
+
+После оптимизации:
+```
+opt -passes=dot-cfg -disable-output main_O2.ll
+dot -Tpng .main.dot -o main_cfg_O2.png
+```
+
+Если имя .dot файла отличается, выполнить: ls *.dot
+
+CFG для main до оптимизации (-O0):
+
+
+
+CFG для main после оптимизации (-O2):
+
+
+
+# Выводы по общей части
+
+1. AST отражает синтаксическую структуру программы (функции, параметры, вызовы).
+2. При -O0 в IR много операций с памятью (alloca, load, store).
+3. При -O2 IR упрощается: возможны inlining, mem2reg, constant folding.
+4. CFG наглядно показывает упрощение потока управления после оптимизации.
+
+
+# Индивидуальная часть работы
+
+# Вариант задания
+Целочисленные константы
+
+# Исходный код const_int.c
+
+```
+const int LIMIT = 100;
+
+int main() {
+    int sum = 0;
+    for (int i = 0; i < LIMIT; ++i) {
+        sum += i;
+    }
+    return sum;
+}
+```
+
+# Задания по варианту
+
+1. Получить IR для -O0.
+2. Применить -O2 и проверить, исчезла ли переменная LIMIT в логике программы.
+3. Применить отдельно sccp (аналог constprop) и ipsccp.
+4. Построить CFG до и после оптимизаций.
+5. Сделать вывод о том, как и когда константа подставляется.
+
+
+# Задание 1. IR для -O0
+
+Команда:
+```
+clang -O0 -S -emit-llvm const_int.c -o const_int_O0.ll
+```
+
+Проверка:
+```
+grep -n -i limit const_int_O0.ll
+grep -n "icmp" const_int_O0.ll
+```
+
+В IR: глобальная константа @LIMIT = 100, в main — цикл, сравнение icmp slt с 100.
+
+Выход:
+
+
+
+# AST для const_int.c
+
+Команда:
+```
+clang -Xclang -ast-dump -fsyntax-only -fno-color-diagnostics const_int.c > const_int_ast.txt
+```
+
+В AST: VarDecl для LIMIT, ForStmt, условие i < LIMIT.
+
+Выход:
+
+
+
+# Задание 2. IR для -O2, исчезла ли LIMIT
+
+Команда:
+```
+clang -O2 -S -emit-llvm const_int.c -o const_int_O2.ll
+grep -n "LIMIT\|icmp" const_int_O0.ll const_int_O2.ll
+```
+
+Результат сравнения:
+
+| Файл | @LIMIT в начале файла | icmp в main | Тело main |
+|------|----------------------|-------------|-----------|
+| const_int_O0.ll | есть | есть | цикл |
+| const_int_O2.ll | может остаться | нет | ret i32 4950 |
+
+Объявление @LIMIT в модуле IR может остаться, но цикл и icmp в main исчезают — сумма 0..99 вычислена при компиляции (4950).
+
+Выход (grep):
+
+
+
+Выход (фрагмент main в const_int_O2.ll):
+
+
+
+# Задание 3. Проходы sccp и ipsccp
+
+В LLVM 21 вместо -constprop:
+```
+opt -passes=sccp -S const_int_O0.ll -o const_int_sccp.ll
+opt -passes=ipsccp -S const_int_O0.ll -o const_int_ipsccp.ll
+```
+
+Сравнение:
+```
+grep -n "LIMIT\|icmp" const_int_O0.ll const_int_sccp.ll const_int_ipsccp.ll
+```
+
+sccp — подстановка констант в пределах функции.
+ipsccp — межпроцедурное распространение констант.
+
+Выход:
+
+
+
+# Задание 4. CFG до и после оптимизаций
+
+До (-O0):
+```
+opt -passes=dot-cfg -disable-output const_int_O0.ll
+dot -Tpng .main.dot -o const_int_cfg_O0.png
+```
+
+После (-O2):
+```
+opt -passes=dot-cfg -disable-output const_int_O2.ll
+dot -Tpng .main.dot -o const_int_cfg_O2.png
+```
+
+CFG до оптимизации (const_int_cfg_O0.png):
+
+
+
+CFG после оптимизации (const_int_cfg_O2.png):
+
+
+
+# Задание 5. Выводы по индивидуальной части
+
+1. В исходнике const int LIMIT = 100 — константа с фиксированным значением.
+2. При -O0 в IR есть @LIMIT и цикл с icmp ... 100.
+3. При -O2 цикл свёрнут, main возвращает 4950; @LIMIT в заголовке файла может остаться, но в работе main не используется.
+4. Pass sccp и ipsccp подставляют известные константы на этапе оптимизации IR.
+5. Подстановка выполняется при оптимизации IR (clang -O2 или opt), а не при построении AST.
+6. CFG до оптимизации содержит блоки цикла; после -O2 — один простой блок.
+
+
+# Соответствие команд методичке и LLVM 21
+
+| Методичка | LLVM 21 |
+|-----------|---------|
+| opt -dot-cfg file.ll | opt -passes=dot-cfg -disable-output file.ll |
+| opt -constprop file.ll | opt -passes=sccp -S file.ll -o out.ll |
+| opt -ipsccp file.ll | opt -passes=ipsccp -S file.ll -o out.ll |
+
+
+# Файлы в папке ~/lab7
+
+main.c, main_O0.ll, main_O2.ll, main_ast.txt, main_cfg_O0.png, main_cfg_O2.png
+
+const_int.c, const_int_O0.ll, const_int_O2.ll, const_int_sccp.ll, const_int_ipsccp.ll, const_int_ast.txt, const_int_cfg_O0.png, const_int_cfg_O2.png
 
 
 
