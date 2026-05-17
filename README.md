@@ -381,7 +381,7 @@ num → digit {digit}
 
 Диаграмма лексера:
 
-<img width="422" height="724" alt="image" src="https://github.com/user-attachments/assets/9b0e4de7-06c1-4f0d-9859-05acf713bb48" />
+<img width="350" height="703" alt="image" src="https://github.com/user-attachments/assets/dd59dcbd-35b4-4072-86b4-baf6224342d7" />
 
 
 
