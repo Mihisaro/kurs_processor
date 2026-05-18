@@ -869,9 +869,7 @@ const MARKS : i32 = 100;
 
 #### Блок-схема
 
-Файл для draw.io: [`diagrams/opt1_copy_propagation.drawio`](diagrams/opt1_copy_propagation.drawio)
-
-![Блок-схема оптимизации 1](diagrams/opt1_copy_propagation.svg)
+<img width="972" height="586" alt="Исходный и оптимизированный IR" src="https://github.com/user-attachments/assets/5fa54623-b37e-4fe7-b3fb-40c209a7808e" />
 
 ### Оптимизация 2: Свёртка констант и канонизация объявления
 
@@ -896,9 +894,7 @@ const MARKS : i32 = 100;
 
 #### Блок-схема
 
-Файл для draw.io: [`diagrams/opt2_constant_fold.drawio`](diagrams/opt2_constant_fold.drawio)
-
-![Блок-схема оптимизации 2](diagrams/opt2_constant_fold.svg)
+<img width="1242" height="673" alt="Каноническая строка const MARKS" src="https://github.com/user-attachments/assets/83fba223-c599-43b7-89dd-429b0b1c7647" />
 
 ## Таблица преобразований IR
 
@@ -918,13 +914,9 @@ const MARKS : i32 = 100;
 
 <img width="1249" height="912" alt="Отчёт IR и оптимизации" src="https://github.com/user-attachments/assets/687e4c1d-a0a9-4b8d-82f0-2b4d274b85ad" />
 
-**Фрагмент: исходный IR и результат оптимизаций:**
 
-<img width="972" height="586" alt="Исходный и оптимизированный IR" src="https://github.com/user-attachments/assets/5fa54623-b37e-4fe7-b3fb-40c209a7808e" />
 
-**Каноническая строка в отчёте:**
 
-<img width="1242" height="673" alt="Каноническая строка const MARKS" src="https://github.com/user-attachments/assets/83fba223-c599-43b7-89dd-429b0b1c7647" />
 
 ### Пример: несколько объявлений
 
@@ -973,13 +965,7 @@ optimize_fold_and_canonical()     → оптимизация 2
 4. Обе оптимизации **локальны** (в пределах одного объявления) и **сохраняют семантику** программы.
 5. Результаты всех этапов доступны в GUI без ручного запуска отдельных модулей.
 
-## Связь с индивидуальным заданием ЛР №7 (LLVM)
 
-| Этап в Clang/LLVM (`const_int.c`) | Аналог в проекте (доп. задание) |
-|-----------------------------------|----------------------------------|
-| IR `-O0`: `alloca`, load/store, цикл | исходный TAC: `t0 = 100`, `MARKS = t0`, `type(MARKS) = i32` |
-| IR `-O2`: подстановка `LIMIT`, свёртка цикла | оптимизация 2: `CONST MARKS : i32 = 100` |
-| Константа известна при компиляции | литерал `100` подставляется напрямую в имя `MARKS` |
 
 
 
