@@ -345,6 +345,471 @@ python main.py
 ```
 
 
+# Лабораторная работа №6
+
+Название: Создание внутренней формы представления программы
+
+Вариант задания: Грамматика на языке Rust
+Язык программирования: Rust
+
+Полное определение грамматики:
+
+E → TA
+
+A → ε | + TA | - TA
+
+T → FB
+
+B → ε | * FB | / FB | % FB
+
+F → num | id | (E)
+
+id → letter {letter | digit | _}
+
+num → digit {digit}
+
+
+Примеры верных строк:
+
+1. 1 + 2
+2. 10 / 2
+3. 2 + (3 -2)
+4. 35 * 2 - 45
+
+
+# Лексические и синтаксические ошибки
+
+Диаграмма лексера:
+
+<img width="350" height="703" alt="image" src="https://github.com/user-attachments/assets/dd59dcbd-35b4-4072-86b4-baf6224342d7" />
+
+
+
+
+
+
+Схема рекурсивного спуска:
+
+<img width="952" height="611" alt="image" src="https://github.com/user-attachments/assets/050fba2c-7606-489d-9ed7-aef34aa7fdb7" />
+
+Тестовые примеры:
+
+<img width="999" height="736" alt="image" src="https://github.com/user-attachments/assets/046fa1b7-e708-4424-92be-6b2e67628d28" />
+
+<img width="998" height="736" alt="image" src="https://github.com/user-attachments/assets/3e5be467-daac-448a-a68e-6dfd6dbe6e6e" />
+
+<img width="1004" height="740" alt="image" src="https://github.com/user-attachments/assets/a09a1482-3bad-4be8-b245-c425d43e1b8b" />
+
+
+# Внутренняя форма представления программы (тетрады):
+
+<img width="524" height="114" alt="image" src="https://github.com/user-attachments/assets/d14a9f85-7da8-4960-97a8-2517f46c033c" />
+
+<img width="592" height="155" alt="image" src="https://github.com/user-attachments/assets/0d7cf481-1f53-4d4a-8ced-8efe73054487" />
+
+
+# ПОЛИЗ:
+
+<img width="464" height="192" alt="image" src="https://github.com/user-attachments/assets/4dbdc717-4775-4046-8f49-4b3069fd1892" />
+
+<img width="451" height="215" alt="image" src="https://github.com/user-attachments/assets/f070f1b4-db68-4aad-9206-b81c8dfed72f" />
+
+
+# Лабораторная работа №7
+
+Название: Преобразование и анализ кода с использованием Clang и LLVM
+
+# Цель работы
+Познакомиться с инструментами Clang и LLVM, научиться получать абстрактное синтаксическое дерево (AST) и промежуточное представление (LLVM IR) для кода на C/C++, применять базовые оптимизации, строить граф потока управления (CFG), а также проанализировать влияние оптимизаций на синтаксические конструкции языка.
+
+# Постановка задачи
+1. Установить Clang, LLVM, opt и Graphviz.
+2. Скомпилировать простой C-файл и получить AST и LLVM IR.
+3. Использовать opt для оптимизации IR.
+4. Построить CFG до и после оптимизаций.
+5. Выполнить индивидуальное задание по варианту.
+
+# Сведения об авторе.
+Сорочинский Михаил Владимирович, АВТ-314
+
+# Используемые технологии
+Clang, LLVM, opt, Graphviz. Среда: Ubuntu (VirtualBox), LLVM 21.
+
+В методичке указаны флаги `-dot-cfg` и `-constprop` для старого opt. В LLVM 21 используется синтаксис `opt -passes=...`. Вместо `-constprop` применяется проход `sccp`.
+
+# Установка и подготовка среды
+
+Команда установки:
+```
+sudo apt update
+sudo apt install clang llvm graphviz -y
+```
+<img width="974" height="327" alt="image" src="https://github.com/user-attachments/assets/d8711309-5c15-467a-8596-fd2b5db14e3c" />
+
+Проверка версий:
+```
+clang --version
+opt --version
+dot -V
+```
+<img width="974" height="304" alt="image" src="https://github.com/user-attachments/assets/a7d126fa-5d1c-47b5-9d29-1c034856aed9" />
+
+Создание рабочей папки:
+```
+mkdir -p ~/lab7
+cd ~/lab7
+```
+
+<img width="974" height="93" alt="image" src="https://github.com/user-attachments/assets/9642c425-a086-49dc-9a3a-22c60637e8f3" />
+
+
+
+
+# Общая часть работы
+
+# Исходный код main.c
+
+Программа на языке C (пример из методички):
+
+```
+#include <stdio.h>
+
+int square(int x) {
+    return x * x;
+}
+
+int main() {
+    int a = 5;
+    int b = square(a);
+    printf("%d\n", b);
+    return 0;
+}
+```
+
+# Получение AST
+
+Команда:
+```
+clang -Xclang -ast-dump -fsyntax-only -fno-color-diagnostics main.c | tee main_ast.txt
+```
+
+<img width="974" height="171" alt="image" src="https://github.com/user-attachments/assets/97b1dad5-f376-4457-ab7c-3c014d3bb33d" />
+
+<img width="974" height="513" alt="image" src="https://github.com/user-attachments/assets/1eddae2b-d4a5-45cf-81a8-5f4f058bce68" />
+
+
+
+
+# Генерация LLVM IR без оптимизаций (-O0)
+
+Команда:
+```
+clang -O0 -S -emit-llvm main.c -o main_O0.ll
+```
+
+В файле main_O0.ll: переменные через alloca, много load и store, вызов функции square.
+
+<img width="974" height="533" alt="image" src="https://github.com/user-attachments/assets/75a06282-a4f1-41b9-9174-b65fc08762a3" />
+
+
+
+
+# Генерация LLVM IR с оптимизацией (-O2)
+
+Команда:
+```
+clang -O2 -S -emit-llvm main.c -o main_O2.ll
+```
+
+После -O2: функция square может быть встроена и удалена, меньше инструкций, упрощение CFG.
+
+<img width="974" height="429" alt="image" src="https://github.com/user-attachments/assets/960e9790-e39f-4bef-b6fe-dde26dc72a0a" />
+
+
+
+
+# Оптимизация IR через opt
+
+Команда:
+```
+opt -passes=default<O2> -S main_O0.ll -o main_opt_O2.ll
+```
+
+<img width="974" height="524" alt="image" src="https://github.com/user-attachments/assets/dcd6a687-9aa6-47bd-9e59-66fc0488fc42" />
+
+
+# Построение CFG (общая часть)
+
+До оптимизации:
+```
+opt -passes=dot-cfg -disable-output main_O0.ll
+dot -Tpng .main.dot -o main_cfg_O0.png
+```
+
+
+После оптимизации:
+```
+opt -passes=dot-cfg -disable-output main_O2.ll
+dot -Tpng .main.dot -o main_cfg_O2.png
+```
+
+Если имя .dot файла отличается, выполнить: ls *.dot
+
+CFG для main до оптимизации (-O0):
+
+<img width="974" height="416" alt="image" src="https://github.com/user-attachments/assets/0dbd5b86-47ce-4385-ba53-d8a0feefb21f" />
+
+
+CFG для main после оптимизации (-O2):
+
+<img width="974" height="232" alt="image" src="https://github.com/user-attachments/assets/94e64ed7-e4a0-40e2-bf6d-183a61be5d8d" />
+
+
+# Выводы по общей части
+
+1. AST отражает синтаксическую структуру программы (функции, параметры, вызовы).
+2. При -O0 в IR много операций с памятью (alloca, load, store).
+3. При -O2 IR упрощается: возможны inlining, mem2reg, constant folding.
+4. CFG наглядно показывает упрощение потока управления после оптимизации.
+
+
+# Индивидуальная часть работы
+
+# Вариант задания
+Целочисленные константы
+
+# Исходный код const_int.c
+
+```
+const int LIMIT = 100;
+
+int main() {
+    int sum = 0;
+    for (int i = 0; i < LIMIT; ++i) {
+        sum += i;
+    }
+    return sum;
+}
+```
+
+# Задания по варианту
+
+1. Получить IR для -O0.
+2. Применить -O2 и проверить, исчезла ли переменная LIMIT в логике программы.
+3. Применить отдельно sccp (аналог constprop) и ipsccp.
+4. Построить CFG до и после оптимизаций.
+5. Сделать вывод о том, как и когда константа подставляется.
+
+
+# Задание 1. IR для -O0
+
+Команда:
+```
+clang -O0 -S -emit-llvm const_int.c -o const_int_O0.ll
+```
+
+Проверка:
+```
+grep -n -i limit const_int_O0.ll
+grep -n "icmp" const_int_O0.ll
+```
+
+В IR: глобальная константа @LIMIT = 100, в main — цикл, сравнение icmp slt с 100.
+
+<img width="974" height="98" alt="image" src="https://github.com/user-attachments/assets/6d2f2121-9235-4d8a-9450-6f3d9acc7b56" />
+
+
+
+# AST для const_int.c
+
+Команда:
+```
+clang -Xclang -ast-dump -fsyntax-only -fno-color-diagnostics const_int.c > const_int_ast.txt
+```
+
+В AST: VarDecl для LIMIT, ForStmt, условие i < LIMIT.
+
+<img width="974" height="459" alt="image" src="https://github.com/user-attachments/assets/d4ecbf75-aadb-4dca-93e0-8080b10a4c55" />
+
+
+
+# Задание 2. IR для -O2, исчезла ли LIMIT
+
+Команда:
+```
+clang -O2 -S -emit-llvm const_int.c -o const_int_O2.ll
+grep -n "LIMIT\|icmp" const_int_O0.ll const_int_O2.ll
+```
+
+Результат сравнения:
+
+| Файл | @LIMIT в начале файла | icmp в main | Тело main |
+|------|----------------------|-------------|-----------|
+| const_int_O0.ll | есть | есть | цикл |
+| const_int_O2.ll | может остаться | нет | ret i32 4950 |
+
+Объявление @LIMIT в модуле IR может остаться, но цикл и icmp в main исчезают — сумма 0..99 вычислена при компиляции (4950).
+
+Выход (grep):
+
+<img width="974" height="189" alt="image" src="https://github.com/user-attachments/assets/c71aa1ea-5ba9-4e74-91ae-b0c4054beded" />
+
+
+Выход (фрагмент main в const_int_O2.ll):
+
+<img width="974" height="138" alt="image" src="https://github.com/user-attachments/assets/33dab986-79c2-4847-89df-d87ed3d22e23" />
+
+
+# Задание 3. Проходы sccp и ipsccp
+
+В LLVM 21 вместо -constprop:
+```
+opt -passes=sccp -S const_int_O0.ll -o const_int_sccp.ll
+opt -passes=ipsccp -S const_int_O0.ll -o const_int_ipsccp.ll
+```
+
+Сравнение:
+```
+grep -n "LIMIT\|icmp" const_int_O0.ll const_int_sccp.ll const_int_ipsccp.ll
+```
+
+sccp — подстановка констант в пределах функции.
+ipsccp — межпроцедурное распространение констант.
+
+<img width="969" height="665" alt="image" src="https://github.com/user-attachments/assets/786db4cc-c86b-44ee-8f32-8a14fbe3c0de" />
+
+<img width="974" height="721" alt="image" src="https://github.com/user-attachments/assets/a209ad06-15a1-4fc5-8d9b-ba3e9323ae1a" />
+
+
+
+
+# Задание 4. CFG до и после оптимизаций
+
+До (-O0):
+```
+opt -passes=dot-cfg -disable-output const_int_O0.ll
+dot -Tpng .main.dot -o const_int_cfg_O0.png
+```
+
+После (-O2):
+```
+opt -passes=dot-cfg -disable-output const_int_O2.ll
+dot -Tpng .main.dot -o const_int_cfg_O2.png
+```
+
+CFG до оптимизации (const_int_cfg_O0.png):
+
+<img width="974" height="1013" alt="image" src="https://github.com/user-attachments/assets/b2738407-ce82-4b06-a911-67768dcc17e6" />
+
+
+CFG после оптимизации (const_int_cfg_O2.png):
+
+<img width="388" height="167" alt="image" src="https://github.com/user-attachments/assets/b839e9c0-6d30-4cea-a5d9-f433d382d845" />
+
+
+# Задание 5. Выводы по индивидуальной части
+
+1. В исходнике const int LIMIT = 100 — константа с фиксированным значением.
+2. При -O0 в IR есть @LIMIT и цикл с icmp ... 100.
+3. При -O2 цикл свёрнут, main возвращает 4950; @LIMIT в заголовке файла может остаться, но в работе main не используется.
+4. Pass sccp и ipsccp подставляют известные константы на этапе оптимизации IR.
+5. Подстановка выполняется при оптимизации IR (clang -O2 или opt), а не при построении AST.
+6. CFG до оптимизации содержит блоки цикла; после -O2 — один простой блок.
+
+
+
+# Задание №6 - Ответы на контрольные вопросы.
+1. Что такое Clang, и какова его роль в процессе компиляции программ?
+   
+Clang - это фронтенд компилятора. Он необходим для работы с исходным текстом программы (C/C++). Он проверяет синтаксис, строит абстрактное синтаксическое дерево (AST) и переводит код в промежуточное представление (LLVM IR).
+
+2. Что представляет собой LLVM и как он используется в современных компиляторах?
+   
+LLVM - это модульная инфраструктура для разработки компиляторов, выполняющая роль оптимизатора и бэкенда. Современные компиляторы используют её как конструктор - берут готовые библиотеки LLVM для оптимизации универсального кода и его перевода в машинные инструкции конкретного процессора (x86, ARM).
+
+3. Чем отличается абстрактное синтаксическое дерево (AST) от промежуточного представления LLVM IR?
+  
+- AST - это высокоуровневое дерево структуры кода, привязанное к синтаксису языка C/C++.
+- LLVM IR - это низкоуровневый линейный ассемблер, полностью независимый от исходного языка программирования и оперирующий базовыми блоками, метками и регистрами.
+
+4. Для чего необходимо промежуточное представление (IR) в процессе компиляции?
+   
+IR избавляет от необходимости писать отдельный компилятор под каждую пару «Язык - Процессор». Вместо этого все языки переводятся в один общий IR. Оптимизации пишутся один раз для IR, и они автоматически работают для любого входного языка и любого целевого процессора.
+
+5. Что делает инструкция alloca в LLVM IR, и зачем она используется в функциях?
+   
+Инструкция alloca выделяет память на стеке текущего кадра функции для локальной переменной. Она используется, чтобы гарантировать переменной её физический адрес в памяти для корректного выполнения операций чтения (load) и записи (store).
+
+6. Зачем нужна оптимизация кода в компиляторе, и какие основные цели она преследует?
+   
+Оптимизация нужна для улучшения характеристик программы без изменения логики её работы. Она позволяет увеличить скорость выполнения, уменьшить размер бинарного файла и снизить потребление оперативной памяти или энергии.
+
+7. Что такое SSA-форма и почему она важна при оптимизации программ?
+   
+SSA (Static Single Assignment) - это форма кода, где каждому виртуальному регистру значение присваивается ровно один раз. Если переменная в C++ меняется, в IR создаются новые регистры (%x1, %x2). При ветвлениях используется специальная ϕ-функция (Phi-node) для выбора нужного значения. SSA важна, так как она убирает ложные зависимости между инструкциями, делая оптимизации простыми и быстрыми.
+
+8. Что такое граф потока управления (CFG) и как он помогает анализировать поведение программы?
+
+CFG - это ориентированный граф функции, где:
+- Вершины - базовые блоки (куски кода без ветвления внутри, выполняющиеся строго линейно).
+- Ребра - стрелки переходов (br, switch) между ними.
+  
+Он помогает компилятору видеть логику переходов, находить циклы, оптимизировать условия и удалять недостижимый код.
+
+9. Как устроено представление арифметических операций в LLVM IR (например, умножение, сложение)?
+    
+Они представлены в строго типизированной трехадресной форме - операция принимает два операнда фиксированного типа и записывает результат в новый регистр. Также могут быть флаги (например, nsw - отсутствие знакового переполнения).
+Пример: %res = add nsw i32 %0, %1 (сложение двух 32-битных целых чисел).
+
+10. Почему функции в LLVM IR обычно представляют собой отдельные единицы анализа и оптимизации?
+    
+Функции обладают локальностью: у них изолированные переменные, четкие аргументы и границы. Анализировать всю программу сразу слишком долго и ресурсоемко, а анализ отдельных функций позволяет компилятору работать быстро и эффективно.
+
+11. Что происходит с функцией в LLVM IR, если она вызывается один раз и очень короткая?
+    
+При включении оптимизаций (например, -O2) оптимизатор применяет инлайнинг (Inlining). Тело этой короткой функции встраивается прямо в место её вызова, а сама функция удаляется. Это убирает накладные расходы процессора на прыжки по коду (call/ret) и сохранение регистров.
+
+12. Какие преимущества даёт использование IR и CFG для автоматических оптимизаций по сравнению с анализом исходного текста на C?
+    
+В IR нет синтаксического разнообразия: любые циклы (for, while, do-while) в IR превращаются в одинаковые базовые блоки и переходы br.
+Действует строгое правило SSA, благодаря которому легко отслеживать, откуда взялось значение в регистре.
+Граф CFG дает четкую математическую модель связей в коде, которую невозможно построить простым анализом текста на С из-за сложных областей видимости и макросов.
+
+
+# Дополнительное задание
+
+<img width="1249" height="912" alt="image" src="https://github.com/user-attachments/assets/687e4c1d-a0a9-4b8d-82f0-2b4d274b85ad" />
+
+## 5. Где происходят генерация IR и оптимизации
+
+Оптимизации выполняются **в коде Python** (не в GUI). Интерфейс только вызывает анализ и показывает результат на вкладке **«IR и оптимизации»**.
+
+
+| Этап | Файл | Функция |
+|------|------|---------|
+| Построение AST | `kurs_processor/semantic_analysis.py` | `build_ast_from_syntax_tree()`, `analyze_semantics_from_parse()` |
+| Генерация IR (TAC) | `kurs_processor/ir_codegen.py` | `generate_tac()` |
+| Оптимизация 1 — убрать временную переменную | `kurs_processor/ir_optimize.py` | `optimize_eliminate_temp_copy()` |
+| Оптимизация 2 — свёртка констант и канонизация | `kurs_processor/ir_optimize.py` | `optimize_fold_and_canonical()` |
+| Цепочка: IR → опт.1 → опт.2 | `kurs_processor/ir_optimize.py` | `apply_optimizations()` |
+| Сборка отчёта для вкладки | `kurs_processor/ir_pipeline.py` | `format_ir_pipeline_report()` |
+| Вызов из GUI (клавиша **F5**) | `kurs_processor/editor.py` | `run_analyzer()` |
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
