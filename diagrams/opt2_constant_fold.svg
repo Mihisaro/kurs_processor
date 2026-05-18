@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="860" viewBox="0 0 560 860">
+
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#222"/>
+    </marker>
+    <style>
+      .box { fill:#fff; stroke:#222; stroke-width:1.5; }
+      .term { fill:#d6ebf9; stroke:#222; stroke-width:1.5; }
+      .dia { fill:#fff4d6; stroke:#222; stroke-width:1.5; }
+      .tx { font:14px Arial,sans-serif; fill:#222; }
+      .hd { font:bold 16px Arial,sans-serif; fill:#222; }
+      .lb { font:bold 12px Arial,sans-serif; fill:#444; }
+      .ln { fill:none; stroke:#222; stroke-width:1.5; marker-end:url(#arr); }
+    </style>
+  </defs>
+
+<text x="280" y="32" text-anchor="middle" class="hd">Опт. 2: свёртка констант и канонизация</text>
+<ellipse cx="280" cy="70" rx="55" ry="22" class="term"/>
+<text x="280" y="75" text-anchor="middle" class="tx">Начало</text>
+<path d="M 280 92 L 280 108" class="ln"/>
+<rect x="145" y="95" width="270" height="40" rx="4" class="box"/>
+<text x="280" y="120" text-anchor="middle" class="tx">i := 0,  out := пустой список</text>
+<path d="M 280 135 L 280 163" class="ln"/>
+<polygon points="280,137 375,175 280,213 185,175" class="dia"/>
+<text x="280" y="180" text-anchor="middle" class="tx">i &lt; len(IR)?</text>
+<text x="165" y="171" class="lb">нет</text>
+<path d="M 185 175 L 50 175" class="ln"/>
+<path d="M 50 175 L 50 800" class="ln"/>
+<path d="M 50 800 L 170 800" class="ln"/>
+<text x="388" y="171" class="lb">да</text>
+<path d="M 280 213 L 280 243" class="ln"/>
+<polygon points="280,183 395,225 280,267 165,225" class="dia"/>
+<text x="280" y="219" text-anchor="middle" class="tx">STORE x = v</text>
+<text x="280" y="237" text-anchor="middle" class="tx">и SET_TYPE x = T ?</text>
+<text x="150" y="221" class="lb">нет</text>
+<path d="M 165 225 L 155 225" class="ln"/>
+<path d="M 155 225 L 155 540" class="ln"/>
+<rect x="68" y="518" width="175" height="44" rx="4" class="box"/>
+<text x="155" y="536" text-anchor="middle" class="tx">out += IR[i]</text>
+<text x="155" y="554" text-anchor="middle" class="tx">i := i + 1</text>
+<path d="M 243 540 L 500 540" class="ln"/>
+<path d="M 500 562 L 500 175" class="ln"/>
+<path d="M 500 175 L 375 175" class="ln"/>
+<text x="408" y="536" class="lb">да</text>
+<path d="M 280 582 L 280 612" class="ln"/>
+<polygon points="280,270 352,300 280,330 208,300" class="dia"/>
+<text x="280" y="305" text-anchor="middle" class="tx">v — литерал?</text>
+<text x="192" y="296" class="lb">нет</text>
+<path d="M 208 300 L 155 300" class="ln"/>
+<path d="M 155 300 L 155 540" class="ln"/>
+<text x="368" y="296" class="lb">да</text>
+<path d="M 280 330 L 280 658" class="ln"/>
+<rect x="125" y="371" width="310" height="48" rx="4" class="box"/>
+<text x="280" y="391" text-anchor="middle" class="tx">out += CONST_DECL</text>
+<text x="280" y="409" text-anchor="middle" class="tx">x : T = v</text>
+<path d="M 280 419 L 280 843" class="ln"/>
+<rect x="205" y="459" width="150" height="32" rx="4" class="box"/>
+<text x="280" y="480" text-anchor="middle" class="tx">i := i + 2</text>
+<path d="M 280 491 L 500 491" class="ln"/>
+<path d="M 500 491 L 500 175" class="ln"/>
+<path d="M 500 175 L 375 175" class="ln"/>
+<text x="508" y="320" class="lb">↑ цикл</text>
+<ellipse cx="280" cy="800" rx="115" ry="24" class="term"/>
+<text x="280" y="805" text-anchor="middle" class="tx">Переиндексация, конец</text>
+</svg>
