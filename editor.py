@@ -8,6 +8,7 @@ from lexical_analyzer import LexicalAnalyzer, TokenType
 from parser import Parser, ParserError
 from search_engine import SearchEngine, SearchType, SearchResult
 from semantic_analysis import analyze_semantics_from_parse, format_ast_single_tree
+from ir_pipeline import format_ir_pipeline_report
 
 TEXTEDITOR_SEARCH_PRESETS = (
     (r"^\d*[0-46-9]$", "search_preset_nums_no5"),
@@ -224,9 +225,20 @@ class TextEditor(QMainWindow):
         self.semantic_splitter.setStretchFactor(1, 2)
         semantic_layout.addWidget(self.semantic_splitter)
 
+        self.ir_tab_host = QWidget()
+        ir_layout = QVBoxLayout(self.ir_tab_host)
+        ir_layout.setContentsMargins(4, 4, 4, 4)
+        self.ir_output = QPlainTextEdit()
+        self.ir_output.setReadOnly(True)
+        ir_font = QFont("Courier New", 10)
+        ir_font.setFixedPitch(True)
+        self.ir_output.setFont(ir_font)
+        ir_layout.addWidget(self.ir_output)
+
         self.results_tab_widget.addTab(self.lexical_table, self.get_text("Лексический анализ"))
         self.results_tab_widget.addTab(self.syntax_table, self.get_text("Синтаксический анализ"))
         self.results_tab_widget.addTab(self.semantic_tab_host, self.get_text("Семантика и AST"))
+        self.results_tab_widget.addTab(self.ir_tab_host, self.get_text("IR и оптимизации"))
 
         self.search_tab_host = QWidget()
         search_tab_layout = QVBoxLayout(self.search_tab_host)
@@ -720,6 +732,7 @@ class TextEditor(QMainWindow):
                 "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}",
                 "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}": "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}",
                 "Семантика и AST": "Семантика и AST",
+                "IR и оптимизации": "IR и оптимизации",
                 
                 "Поиск": "Поиск",
                 "Найти:": "Найти:",
@@ -860,6 +873,7 @@ class TextEditor(QMainWindow):
                 "Всего лексем: {} | Лексических ошибок: {} | Синтаксических ошибок: {}": "Total tokens: {} | Lexical errors: {} | Syntax errors: {}",
                 "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}": "Total tokens: {} | Lexical: {} | Syntax: {} | Semantic: {}",
                 "Семантика и AST": "Semantics and AST",
+                "IR и оптимизации": "IR and optimizations",
                 
                 "Поиск": "Search",
                 "Найти:": "Find:",
@@ -1535,6 +1549,15 @@ class TextEditor(QMainWindow):
             self.semantic_table.setItem(row, 2, pos_item)
             self.semantic_table.setItem(row, 3, desc_item)
         self.semantic_output.setPlainText(format_ast_single_tree(_fa))
+        self.ir_output.setPlainText(
+            format_ir_pipeline_report(
+                _va,
+                full_ast=_fa,
+                source=text,
+                syntax_error_count=len(syntax_errors),
+                semantic_error_count=len(semantic_errors),
+            )
+        )
 
         status = self.get_text(
             "Всего лексем: {} | Лексических: {} | Синтаксических: {} | Семантических: {}"
