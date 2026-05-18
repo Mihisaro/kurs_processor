@@ -800,6 +800,10 @@ CFG - это ориентированный граф функции, где:
 <img width="972" height="586" alt="image" src="https://github.com/user-attachments/assets/5fa54623-b37e-4fe7-b3fb-40c209a7808e" />
 
 
+<img width="1242" height="673" alt="image" src="https://github.com/user-attachments/assets/83fba223-c599-43b7-89dd-429b0b1c7647" />
+
+
+
 
 
 
